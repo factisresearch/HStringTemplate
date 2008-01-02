@@ -1,4 +1,4 @@
-{-# OPTIONS -O2 -fbang-patterns -fglasgow-exts -fallow-overlapping-instances -fallow-undecidable-instances -optc-O3 #-}
+{-# OPTIONS -O2 -fbang-patterns -fglasgow-exts -optc-O3 #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -22,7 +22,8 @@
 -----------------------------------------------------------------------------
 
 module Text.StringTemplate.Base
-    (StringTemplate, toString, newStubSTMP, newAngleStubSTMP, SElem
+    (StringTemplate, toString, newStubSTMP, newAngleStubSTMP, 
+     StringTemplateShows(..), ToSElem(..),
     ) where
 import Control.Monad
 import Control.Arrow hiding (pure)
@@ -30,16 +31,18 @@ import Control.Applicative hiding ((<|>),many)
 import Data.Maybe
 import Data.Monoid
 import Data.List
-import Numeric
 import Text.ParserCombinators.Parsec
 import qualified Data.Map as M
+
+import Text.StringTemplate.Classes
+import Text.StringTemplate.Instances --move
 
 import Debug.Trace --DEBUG
 
 {--------------------------------------------------------------------
   Utilities and Types
 --------------------------------------------------------------------}
-
+--add bool instance where false is snull and true is STR ""
 instance Applicative (GenParser tok st) where pure = return; (<*>) = ap;
 
 o = (.).(.)
@@ -52,14 +55,9 @@ paddedTrans n xs = take lx $ trans' xs
           h (x:xs) = x; h _ = n; t (x:y:xs) = (y:xs); t _ = [n];
           m (x:xs) = (x:xs); m _ = [n];
 
-type SMap = M.Map String SElem
-data SElem = STR String |STSH STShow | SM SMap | LI [SElem] | SNull deriving (Eq, Ord, Show)
-justSTR = const . STR
-
 {--------------------------------------------------------------------
   StringTemplate and the API
 --------------------------------------------------------------------}
---TODO: add lookup and addition functions to it. Move the fancy stuff to elsewhere.
 
 -- | A String with \"holes\" in it.
 data StringTemplate = STMP {stenv :: SEnv, runSTMP :: (SEnv -> String)}
@@ -78,59 +76,15 @@ newStubSTMP = STMP (SEnv M.empty [] stubSGen) . parseSTMP ('$','$')
 newAngleStubSTMP :: String -> StringTemplate
 newAngleStubSTMP = STMP (SEnv M.empty [] stubSGen) . parseSTMP ('<','>')
 
-class ToSElem a where
-    toSElem :: a -> SElem
-
-instance ToSElem String where
-    toSElem = STR
-
-instance (ToSElem a) => ToSElem [a] where
-    toSElem = LI . map toSElem 
-
-instance (ToSElem a) => ToSElem (M.Map String a) where
-    toSElem = SM . fmap toSElem 
-
-class (Eq a, Show a, Ord a) => StringTemplateShows a where
-    stringTemplateShow :: a -> String
-    stringTemplateFormattedShow :: String -> a -> String
-    stringTemplateFormattedShow = flip $ const . stringTemplateShow
-
-data STShow = forall a.(StringTemplateShows a, Show a, Eq a, Ord a) => STShow a 
-stshow (STShow a) = stringTemplateShow a
-stfshow f (STShow a) = stringTemplateFormattedShow f a
-
-instance Eq STShow where
-    (STShow a) == (STShow b) = show a == show b
-
-instance Ord STShow where
-    (STShow a) >= (STShow b) = show a >= show b
-
-instance Show STShow where
-    show (STShow a) = "STShow "++show a
-
-instance (StringTemplateShows a) => ToSElem a where
-    toSElem = STSH . STShow
-
-instance (Show a, Eq a, Ord a) => StringTemplateShows a where
-    stringTemplateShow a = show a
-
-instance StringTemplateShows Float where
-    stringTemplateShow = flip showFloat ""
-    stringTemplateFormattedShow = flip flip [] . showGFloat . fmap fst . listToMaybe . reads
-
-instance StringTemplateShows Double where
-    stringTemplateShow = flip showFloat ""
-    stringTemplateFormattedShow = flip flip [] . showGFloat . fmap fst . listToMaybe . reads
-
 setAttribute :: (ToSElem a) => String -> a -> StringTemplate -> StringTemplate
 setAttribute s x st = st {stenv = envInsApp s (toSElem x) (stenv st)}
-
 
 {--------------------------------------------------------------------
   Internal API
 --------------------------------------------------------------------}
 --TODO we ignore wrap, anchor and format options, as well as indentation
 --Switch to using ShowS
+--typeclass for generators with getTemplate function
 
 data SEnv = SEnv {senv :: SMap, sopts :: [(String, SEnv -> SElem)], sgen :: String -> StringTemplate}
 
@@ -158,17 +112,21 @@ showVal snv se =
     where sepVal  = fromMaybe (justSTR "") =<< optLookup "seperator" $ snv
           joinUp  = intercalate (showVal snv sepVal) . map (showVal snv)
 
-parseSTMP (ca,cb) = mconcat . either ((:[]) . const . show) id
-                    . runParser stmpl (ca,cb) "in"
+parseSTMP x = either (const . show) id . runParser stmpl x "in"
 
 {--------------------------------------------------------------------
   Utility Combinators
 --------------------------------------------------------------------}
 
+justSTR = const . STR
+stshow (STShow a) = stringTemplateShow a
+stfshow f (STShow a) = stringTemplateFormattedShow f a
+
 around x p y = do {char x; v<-p; char y; return v}
 spaced p = do {spaces; v<-p; spaces; return v}
 word = many1 alphaNum
 comlist p = spaced (p `sepBy1` spaced (char ','))
+props = many (char '.' >> (around '(' exprn ')' <|> justSTR <$> word))
 
 escapedChar chs =
     noneOf chs >>= \x -> if x == '\\' then anyChar >>= \y ->
@@ -178,37 +136,74 @@ escapedStr chs = concat <$> many1 (escapedChar chs)
 {--------------------------------------------------------------------
   The Grammar
 --------------------------------------------------------------------}
--- TODO if then else as STATEMENTS
--- alternt templates to multival attributes i.e.: $names:blueItem(),greenItem()$
--- Comments
 
-stmpl :: GenParser Char (Char,Char) [SEnv -> String]
+stmpl :: GenParser Char (Char,Char) (SEnv -> String)
 stmpl= do
   (ca, cb) <- getState
-  many (const <$> escapedStr (ca:[]) <|> around ca optExpr cb <?> "template")
+  mconcat <$> many1 (const <$> escapedStr (ca:[]) <|>
+                     try (around ca optExpr cb) <|> try comment <?> "template")
 
 subStmp = do
   (ca, cb) <- getState
   udEnv <- option (transform ["it","i","i0"])
            (transform . (++["i","i0"]) <$> try attribNames)
-  st <- mconcat <$> many (const <$> escapedStr (ca:"}")
-                          <|> around ca optExpr cb <?> "subtemplate")
+  st <- mconcat <$> many (const <$> escapedStr (ca:"}") <|> around ca optExpr cb
+                          <|> try comment <?> "subtemplate")
   return (st `o` udEnv)
       where transform  = flip (foldr (uncurry envInsert)) `o` zip
-            attribNames = do
-              w <- comlist (spaced word)
-              char '|'
-              return w
+            attribNames = (char '|' >>) . return =<< comlist (spaced word)
+
+comment = do
+  (ca, cb) <- getState
+  string (ca:'!':[]) >> manyTill anyChar (try . string $ '!':cb:[])
+  return (const "")
 
 optExpr = do
-  expr <- spaced exprn
-  opts <- many opt 
+  (ca, cb) <- getState
+  ((try (string ("else"++[cb])) <|> try (string ("elseif(")) <|>
+    try (string "endif")) >> fail "Malformed If Statement.") <|> return ()
+  (expr,opts) <- liftM2 (,) (spaced exprn) (many opt)
   skipMany (char ';')
   return ((showVal <*> expr) . optInsert opts)
-      where opt = do
-              var <- around ';' (spaced word) '='
-              expr <- spaced exprn
-              return (var, expr)
+      where opt = around ';' (spaced word) '=' >>= (<$> spaced exprn) . (,)
+
+{--------------------------------------------------------------------
+  Statements
+--------------------------------------------------------------------}
+
+getProp (p:ps) (SM mp) = maybe <$> const SNull <*> flip (getProp ps)
+                         <*> (flip M.lookup mp . (showVal <*> p))
+getProp (p:ps) _ = const SNull
+getProp _ se = const se
+
+ifIsSet t e n SNull = if n then e else t
+ifIsSet t e n _ = if n then t else e
+
+substat = try elseifstat <|> try elsestat <|> endifstat
+
+parseif cb = (,,,,,) <$> (option True (char '!' >> return False)) <*> exprn <*>
+           props <*> (char ')' >> char cb) <*> stmpl <*> substat
+
+stat = do
+  (ca, cb) <- getState
+  string "if("
+  (n, e, p, _, act, cont) <- parseif cb
+  return (STR `o` ifIsSet act cont n =<< getProp p =<< e)
+
+elseifstat = do
+  (ca, cb) <- getState
+  char ca >> string "elseif("
+  (n, e, p, _, act, cont) <- parseif cb
+  return (ifIsSet act cont n =<< getProp p =<< e)
+
+elsestat = do
+  (ca, cb) <- getState
+  around ca (string "else") cb
+  act <- stmpl
+  char ca >> string "endif"
+  return act
+
+endifstat = getState >>= char . fst >> string "endif" >> return (const "")
 
 {--------------------------------------------------------------------
   Expressions
@@ -216,50 +211,14 @@ optExpr = do
 
 exprn :: GenParser Char (Char,Char) (SEnv -> SElem)
 exprn = do
-  (ca, cb) <- getState
-  ((try (string ("else"++[cb]) <|> string "if") <|> try (string "endif")) >> fail "") <|> return ()
   exprs <- (:[]) <$> try stat <|> comlist subexprn <?> "expression"
-  templ <- option (const . head) (char ':' >> (anonTmpl <|> regTemplate))
+  templ <- option (const . head)
+           (char ':' >> (iterApp <$> comlist (anonTmpl <|> regTemplate)))
   return (templ =<< sequence exprs)
 
-stat = do
-  string "if("
-  n <- option id (char '!' >> return not)
-  e <- exprn
-  p <- many (char '.' >> (around '(' exprn ')' <|> justSTR <$> word))
-  char ')'
-  (ca, cb) <- getState
-  char cb
-  sst <- substat
-  return (STR . (toStat sst n =<< getProp p =<< e))
-      where toStat sst n e = sst (n e)
-            getProp (p:ps) (SM mp) = maybe <$> const False <*> flip (getProp ps)
-                                     <*> (flip M.lookup mp . (showVal <*> p))
-            getProp (p:ps) _ = const False
-            getProp _ se = const True
---alsoelse, endif, factor cleanly
-
-substat = do
-  stuff <- mconcat <$> stmpl
-  string "elseif("
-  n <- option id (char '!' >> return not)
-  e <- exprn
-  p <- many (char '.' >> (around '(' exprn ')' <|> justSTR <$> word))
-  char ')'
-  (ca, cb) <- getState
-  char cb
-  sst <- substat
-  return (\pred -> (if pred then stuff else const "") `mappend` (toStat sst n =<< getProp p =<< e))
-      where toStat sst n e = sst (n e)
-            getProp (p:ps) (SM mp) = maybe <$> const False <*> flip (getProp ps)
-                                     <*> (flip M.lookup mp . (showVal <*> p))
-            getProp (p:ps) _ = const False
-            getProp _ se = const True
-
-
 subexprn = cct <$> ((`sepBy1` spaced (char '+')) $ spaced (braceConcat <|>
-                     ($ [STR ""]) <$> try regTemplate <|> attrib <|>
-                     ($ [STR ""]) <$> anonTmpl <?> "expression"))
+                     STR `o` ($ [SNull]) <$> try regTemplate <|> attrib <|>
+                     STR `o` ($ [SNull]) <$> anonTmpl <?> "expression"))
     where cct xs@(x:y:z) = STR . (concatMap <$> showVal <*> sequence xs)
           cct (x:xs) = x
  
@@ -272,19 +231,14 @@ literal = justSTR <$> (around '"' (concat <$> many (escapedChar "\"")) '"'
 attrib = do
   a <- literal <|> try functn <|> prepExp <$> word <|> around '(' exprn ')'
          <?> "attribute"
-  props <- many (char '.' >> (around '(' exprn ')' <|> justSTR <$> word))
-  return (getProp props =<< a)
-      where prepExp var = fromMaybe <$> nullOpt <*> (envLookup var)
-            getProp (p:ps) (SM mp) = maybe <$> nullOpt <*> (flip (getProp ps)) 
-                                     <*> (flip M.lookup mp . (showVal <*> p))
-            getProp (p:ps) _ = nullOpt
-            getProp _ se = const se
+  proprs <- props
+  return (getProp proprs =<< a)
+      where prepExp var = fromMaybe SNull <$> (envLookup var)
 
 functn = do
   f <- string "first" <|> string "rest" <|> string "strip"
        <|> try (string "length") <|> string "last"
-  e <- around '(' exprn ')'
-  return (fApply f . e)
+  (fApply f .) <$> around '(' exprn ')'
       where fApply str (LI xs)
                 | str == "first"  = head xs
                 | str == "last"   = last xs
@@ -299,33 +253,49 @@ functn = do
 {--------------------------------------------------------------------
   Templates
 --------------------------------------------------------------------}
+--regTemplate takes list and not just one -- list is also i, i0
+--doesCycleApp need the monkey?
 
-anonTmpl = mkAnon <$> around '{' subStmp '}'
-    where
-      mkAnon stmp ((LI xs):[]) = STR . (pluslen xs >>=) . flip stmp
-      mkAnon stmp vars@((LI xs):vs) =  STR . (liTrans vars >>=) . flip stmp
-      mkAnon stmp v =  STR . stmp v
-      liTrans = pluslen' . paddedTrans SNull . map u
-          where u (LI x) = x; u x = [x]
-      pluslen' xss@(x:xs) = zipWith (++) xss $ mkIndex [0..(length x)]
-      pluslen xs = zipWith (:) xs $ mkIndex [0..(length xs)]
-      mkIndex = map (\x -> [STR (show (x+1)), STR (show x)])
+mkIndex = map (((:) . STR . show . (1+)) <*> ((:[]) . STR . show))
+
+cycleApp = mconcat `o` (zipWith (. (:[])) . map iterTmpl . cycle)
+iterTmpl stmp xs = (xs >>=) . flip stmp
+
+pluslen xs = zipWith (:) xs $ mkIndex [0..(length xs)]
+liTrans = pluslen' . paddedTrans SNull . map u
+    where u (LI x) = x; u x = [x]
+          pluslen' xss@(x:xs) = zipWith (++) xss $ mkIndex [0..(length x)]
+
+iterApp (f:[]) (LI xs:[]) = STR . (pluslen xs >>=) . flip f
+iterApp (f:[]) vars@(LI xs:vs) = STR . (liTrans vars >>=) . flip f
+iterApp (f:[]) v = STR . f v
+
+iterApp fs (LI xs:[]) = STR . cycleApp fs (pluslen xs)
+iterApp fs vars@(LI xs:vs) = STR . cycleApp fs (liTrans vars)
+iterApp fs xs = STR . cycleApp fs (pluslen xs)
+
+anonTmpl = around '{' subStmp '}'
 
 regTemplate = do
   (try functn >> fail "") <|> return ()
   name <- justSTR <$> word <|> around '(' exprn ')'
   vals <- around '(' (spaced $ try assgn <|> anonassgn <|> return []) ')'
-  return (\se env -> (makeTmpl vals (name env) se env))
-      where makeTmpl v (STR x) (se:ses) =
-                STR . toString . stBind (("it",const se):v) . stLookup x
-            makeTmpl _ _ _ = justSTR "Invalid Template Specified"
+  return (join . (. name) . makeTmpl vals)
+      where makeTmpl v (se:i:i0:r) (STR x) =
+                toString . stBind (("it",const se):
+                                   ("i",const i):
+                                   ("i0",const i0):v) . stLookup x
+            makeTmpl _ _ _ = const "Invalid Template Specified"
             anonassgn = ((:[]) . (,) "it" <$> exprn)
-            assgn = (`sepEndBy1` char ';') $ do
-                v <- spaced word
-                char '='
-                e <- spaced exprn
-                return (v, e)
+            assgn = (spaced word >>= (<$> (char '=' >> spaced exprn)) . (,))
+                    `sepEndBy1` char ';'
 
 --DEBUG
-rP p str = either ( const . STR . show) id (parse p "input" str)
+rP p str = either (const . STR . show) id (parse p "input" str)
 tsM = M.insert "foo" ((LI [STR "f1"])) (M.singleton "bar" (LI [STR "barr",STR "baz"]))
+
+pTrace s = try $
+         do
+           x <- try $ many1 anyChar
+           trace (s++": " ++x) $ try $ char 'z'
+           fail x
