@@ -253,13 +253,10 @@ functn = do
 {--------------------------------------------------------------------
   Templates
 --------------------------------------------------------------------}
---regTemplate takes list and not just one -- list is also i, i0
---doesCycleApp need the monkey?
 
 mkIndex = map (((:) . STR . show . (1+)) <*> ((:[]) . STR . show))
 
-cycleApp = mconcat `o` (zipWith (. (:[])) . map iterTmpl . cycle)
-iterTmpl stmp xs = (xs >>=) . flip stmp
+cycleApp = mconcat `o` (zipWith ($) . cycle)
 
 pluslen xs = zipWith (:) xs $ mkIndex [0..(length xs)]
 liTrans = pluslen' . paddedTrans SNull . map u
@@ -282,8 +279,7 @@ regTemplate = do
   vals <- around '(' (spaced $ try assgn <|> anonassgn <|> return []) ')'
   return (join . (. name) . makeTmpl vals)
       where makeTmpl v (se:i:i0:r) (STR x) =
-                toString . stBind (("it",const se):
-                                   ("i",const i):
+                toString . stBind (("it",const se):("i",const i):
                                    ("i0",const i0):v) . stLookup x
             makeTmpl _ _ _ = const "Invalid Template Specified"
             anonassgn = ((:[]) . (,) "it" <$> exprn)
