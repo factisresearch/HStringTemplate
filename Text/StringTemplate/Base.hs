@@ -127,10 +127,9 @@ cacheSTGroup m g = unsafePerformIO $ go <$> newIORef M.empty
                          else return $ First . Just $ st)
                       (M.lookup s mp)
               where udReturn mp now = maybe (return $ First Nothing)
-                                      (\st -> do
-                                         atomicModifyIORef r $
-                                          flip (,) () . M.insert s (now, st)
-                                         return $ First . Just $ st)
+                                      (atomicModifyIORef r .
+                                       ap ((>> return) . (flip (,) () .) .
+                                           M.insert s . (,) now) (First . Just))
                                       (getFirst $ g s)
 
 --TODO: Lift out casing on time into the atomicModify call? 
