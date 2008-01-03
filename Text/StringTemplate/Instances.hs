@@ -7,6 +7,8 @@ import qualified Data.Map as M
 import Numeric
 import Data.Maybe
 
+--add bool instance where false is snull and true is STR ""
+
 instance ToSElem String where
     toSElem = STR
 

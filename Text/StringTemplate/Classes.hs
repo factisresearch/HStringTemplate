@@ -1,8 +1,20 @@
 {-# OPTIONS -O2 -fglasgow-exts -optc-O3 #-}
 module Text.StringTemplate.Classes
-    (SElem(..), StringTemplateShows(..), ToSElem(..), SMap, STShow(..)
+    (SElem(..), StringTemplateShows(..), ToSElem(..), SMap, STShow(..),
+     First(..)
     ) where
 import qualified Data.Map as M
+import Data.Monoid
+
+
+--For 6.6.1 ONLY
+newtype First a = First { getFirst :: Maybe a }
+	deriving (Eq, Ord, Read, Show)
+instance Monoid (First a) where
+	mempty = First Nothing
+	r@(First (Just _)) `mappend` _ = r
+	First Nothing `mappend` r = r
+
 
 type SMap = M.Map String SElem
 
@@ -26,3 +38,4 @@ instance Ord STShow where
 
 instance Show STShow where
     show (STShow a) = "STShow "++show a
+
