@@ -1,37 +1,10 @@
 {-# OPTIONS -O2 -fbang-patterns -fglasgow-exts -optc-O3 #-}
 
------------------------------------------------------------------------------
--- |
--- Module      :  Text.StringTemplate.Base
--- Copyright   :  (c) Sterling Clover 2008
--- License     :  BSD-style
--- Maintainer  :  s.clover@gmail.com
--- Stability   :  experimental
--- Portability :  portable
--- Version     :  0.1
---
--- A StringTemplate is a String with \"holes\" in it.
--- This is a port of the Java StringTemplate library written by Terrence Parr.
--- (<http://www.stringtemplate.org>).
---
--- This library implements the basic 3.0 grammar, lacking Groups,
--- Regions, and Interfaces.
--- Additionally, it does not yet implement indentation and wrapping.
--- The scheme is to add these as an additional layer at some point.
---
--- This library does extend the current StringTemplate grammar by allowing the
--- application of alternating attributes to anonymous
--- as well as regular templates, including therefore sets of alternating
--- attributes.
---
--- Basic instances are provided of the StringTemplateShows class.
--- Any type deriving this class can be passed automatically as a StringTemplate
--- attribute. Additional bindings for HAppS Data, JSON, etc. are anticipated.
------------------------------------------------------------------------------
-
 module Text.StringTemplate.Base
     (StringTemplate, toString, newSTMP, newAngleSTMP, 
-     StringTemplateShows(..), ToSElem(..),
+     StringTemplateShows(..), ToSElem(..), STGen, setAttribute,
+     groupStringTemplates, addSuperGroup, addSubGroup, mergeSTGroups,
+     stringTemplateFileGroup, cacheSTGroup
     ) where
 import Control.Monad
 import Control.Arrow hiding (pure)
@@ -42,21 +15,28 @@ import Data.List
 import Text.ParserCombinators.Parsec
 import System.Time
 import System.IO
+import System.FilePath
 import Data.IORef
 import System.IO.Unsafe
 import qualified Data.Map as M
 
 import Text.StringTemplate.Classes
-import Text.StringTemplate.Instances --move
 import Debug.Trace --DEBUG
 
 {--------------------------------------------------------------------
   Utilities and Types
 --------------------------------------------------------------------}
+
 instance Applicative (GenParser tok st) where pure = return; (<*>) = ap;
 
 o = (.).(.)
+(|.) f g x = f (g x)
+(.>>) f g = f >> g
+infixr 5 .>>
+infixr 3 |.
+infixr 8 `o`
 intercalate = concat `o` intersperse
+swing = flip . (. flip id)
 paddedTrans n xs = take lx $ trans' xs
     where lx = maximum (map length xs)
           trans' [] = []
@@ -101,17 +81,28 @@ groupStringTemplates :: [(String,StringTemplate)] -> STGen
 groupStringTemplates xs = newGen
     where newGen s = First (M.lookup s ng)
           ng = foldl' (flip $ uncurry M.insert) M.empty $
-               map (second (sgInsert newGen)) xs
+               map (second $ sgInsert newGen) xs
 
 -- | Adds a supergroup to any StringTemplate group such that templates from
 -- the original group are now able to call ones from the supergroup as well.
 addSuperGroup :: STGen -> STGen -> STGen
 addSuperGroup f g = First . maybe Nothing (Just . sgInsert g) . getFirst . f
 
+-- | Adds a "subgroup" to any StringTemplate group such that templates from
+-- the original group now have template calls "shadowed" by the subgroup.
+addSubGroup :: STGen -> STGen -> STGen
+addSubGroup f g = First . maybe Nothing (Just . sgOverride g) . getFirst . f
+
+-- | Merges two groups into a single group. This function is left-biased,
+-- prefering bindings from the first group when there is a conflict.
+mergeSTGroups :: STGen -> STGen -> STGen
+mergeSTGroups f g = addSuperGroup f g `mappend` addSubGroup g f
+
 -- | Given a path, returns a group which generates all files in said directory.
 stringTemplateFileGroup :: String -> STGen
 stringTemplateFileGroup path = stfg
-  where stfg =  First . Just . STMP (SEnv M.empty [] stfg) . parseSTMP ('$','$') . unsafePerformIO . readFile . (path ++)
+  where stfg =  First . Just . STMP (SEnv M.empty [] stfg) .
+                parseSTMP ('$','$') . unsafePerformIO . readFile . (path </>)
 
 -- | Given an integral amount of seconds and a group, returns a group cached for
 -- that span of time.
@@ -121,22 +112,17 @@ cacheSTGroup m g = unsafePerformIO $ go <$> newIORef M.empty
                      mp <- readIORef r
                      now <- getClockTime
                      maybe (udReturn mp now)
-                      (\(t,st) -> if (tdSec . normalizeTimeDiff $
+                      (\(t, st) -> if (tdSec . normalizeTimeDiff $
                            diffClockTimes now t) > m
                          then udReturn mp now
                          else return $ First . Just $ st)
-                      (M.lookup s mp)
+                      . M.lookup s $ mp
               where udReturn mp now = maybe (return $ First Nothing)
                                       (\st -> do
                                          atomicModifyIORef r $
                                           flip (,) () . M.insert s (now, st)
                                          return $ First . Just $ st)
-                                      (getFirst $ g s)
-
---TODO: Lift out casing on time into the atomicModify call? 
---This would make the entire transaction atomic tho, which is less efficient
---when we're not modifying it, but more under heavy load when we are.
---probably not worth it.
+                                      . getFirst . g $ s
 
 {--------------------------------------------------------------------
   Internal API
@@ -147,29 +133,28 @@ cacheSTGroup m g = unsafePerformIO $ go <$> newIORef M.empty
 data SEnv = SEnv {smp :: SMap, sopts :: [(String, SEnv -> SElem)], sgen :: STGen}
 
 envLookup x = M.lookup x . smp
-optLookup x = lookup x . sopts
-nullOpt = fromMaybe (justSTR "") =<< optLookup "null"
-stLookup x env = maybe (newSTMP ("No Template Found for: " ++ x))
-                 (\st-> st {senv = env}) $ getFirst (sgen env x)
-
-envInsert s x y = y {smp = M.insert s x (smp y)}
-envInsApp s x y = y {smp = M.insertWith app s x (smp y)}
+envInsert (s, x) y = y {smp = M.insert s x (smp y)}
+envInsApp  s  x  y = y {smp = M.insertWith app s x (smp y)}
     where app x (LI ys) = LI (x:ys)
           app x y = LI [x,y]
 
-sgInsert g st = let e = senv st in st {senv = e {sgen = sgen e `mappend` g} }
-
+optLookup x = lookup x . sopts
 optInsert x env = env {sopts = x ++ sopts env}
+nullOpt = fromMaybe (justSTR "") =<< optLookup "null"
 
-stBind :: [(String, SEnv -> SElem)] -> StringTemplate -> StringTemplate
-stBind v st = st {senv = foldr (uncurry ((=<<) . envInsert)) (senv st) v}
+stLookup x env = maybe (newSTMP ("No Template Found for: " ++ x))
+                 (\st-> st {senv = env}) $ getFirst (sgen env x)
+
+sgInsert   g st = let e = senv st in st {senv = e {sgen = sgen e `mappend` g} }
+sgOverride g st = let e = senv st in st {senv = e {sgen = g `mappend` sgen e} }
 
 showVal :: SEnv -> SElem -> String
 showVal snv se =
     case se of (STR x)-> x; (LI xs)-> joinUp xs; (SM sm)-> joinUp $ M.elems sm
-               (STSH x)-> stshow x; SNull -> showVal <*> nullOpt $ snv 
-    where sepVal  = fromMaybe (justSTR "") =<< optLookup "seperator" $ snv
-          joinUp  = intercalate (showVal snv sepVal) . map (showVal snv)
+               (STSH x)-> format x; SNull -> showVal <*> nullOpt $ snv 
+    where sepVal = fromMaybe (justSTR "") =<< optLookup "seperator" $ snv
+          format = maybe stshow . stfshow <*> optLookup "format" $ snv
+          joinUp = intercalate (showVal snv sepVal) . map (showVal snv)
 
 parseSTMP x = either (const . show) id . runParser stmpl x "in"
 
@@ -179,13 +164,13 @@ parseSTMP x = either (const . show) id . runParser stmpl x "in"
 
 justSTR = const . STR
 stshow (STShow a) = stringTemplateShow a
-stfshow f (STShow a) = stringTemplateFormattedShow f a
+stfshow snv fs (STShow a) = stringTemplateFormattedShow (showVal <*> fs $ snv) a
 
 around x p y = do {char x; v<-p; char y; return v}
 spaced p = do {spaces; v<-p; spaces; return v}
 word = many1 alphaNum
 comlist p = spaced (p `sepBy1` spaced (char ','))
-props = many (char '.' >> (around '(' exprn ')' <|> justSTR <$> word))
+props = many $ char '.' >> (around '(' exprn ')' <|> justSTR <$> word)
 
 escapedChar chs =
     noneOf chs >>= \x -> if x == '\\' then anyChar >>= \y ->
@@ -204,12 +189,13 @@ stmpl= do
 
 subStmp = do
   (ca, cb) <-getState
-  udEnv <-option (transform ["it","i","i0"])
-           (transform . (++["i","i0"]) <$> try attribNames)
+  udEnv <-option (transform ["it"])
+           (transform <$> try attribNames)
   st <-mconcat <$> many (const <$> escapedStr (ca:"}|") <|> around ca optExpr cb
                           <|> try comment <?> "subtemplate")
   return (st `o` udEnv)
-      where transform  = flip (foldr (uncurry envInsert)) `o` zip
+      where transform an (att,i:i0:[]) = 
+                flip (foldr envInsert) $ zip ("i":"i0":an) (i:i0:att)
             attribNames = (char '|' >>) . return =<< comlist (spaced word)
 
 comment = do
@@ -219,8 +205,8 @@ comment = do
 
 optExpr = do
   (ca, cb) <- getState
-  ((try (string ("else"++[cb])) <|> try (string ("elseif(")) <|>
-    try (string "endif")) >> fail "Malformed If Statement.") <|> return ()
+  (try (string ("else"++[cb])) <|> try (string "elseif(") <|>
+    try (string "endif")) .>> fail "Malformed If Statement." <|> return ()
   (expr,opts) <- liftM2 (,) (spaced exprn) (many opt)
   skipMany (char ';')
   return ((showVal <*> expr) . optInsert opts)
@@ -231,7 +217,7 @@ optExpr = do
 --------------------------------------------------------------------}
 
 getProp (p:ps) (SM mp) = maybe <$> const SNull <*> flip (getProp ps)
-                         <*> (flip M.lookup mp . (showVal <*> p))
+                         <*> (flip M.lookup mp |. showVal <*> p)
 getProp (p:ps) _ = const SNull
 getProp _ se = const se
 
@@ -240,8 +226,8 @@ ifIsSet t e n _ = if n then t else e
 
 substat = try elseifstat <|> try elsestat <|> endifstat
 
-parseif cb = (,,,,,) <$> (option True (char '!' >> return False)) <*> exprn <*>
-           props <*> (char ')' >> char cb) <*> stmpl <*> substat
+parseif cb = (,,,,,) <$> option True (char '!' >> return False) <*> exprn <*>
+           props <*> char ')' .>> char cb <*> stmpl <*> substat
 
 stat = do
   (ca, cb) <- getState
@@ -272,16 +258,17 @@ exprn :: GenParser Char (Char,Char) (SEnv -> SElem)
 exprn = do
   exprs <- (:[]) <$> try stat <|> comlist subexprn <?> "expression"
   templ <- option (const . head)
-           (char ':' >> (iterApp <$> comlist (anonTmpl <|> regTemplate)))
+           (char ':' >> iterApp <$> comlist (anonTmpl <|> regTemplate))
   return (templ =<< sequence exprs)
 
-subexprn = cct <$> ((`sepBy1` spaced (char '+')) $ spaced (braceConcat <|>
-                     STR `o` ($ [SNull]) <$> try regTemplate <|> attrib <|>
-                     STR `o` ($ [SNull]) <$> anonTmpl <?> "expression"))
+subexprn = cct <$> spaced
+            (braceConcat <|> STR `o` ($ ([SNull],ix0)) <$> try regTemplate <|>
+             attrib <|> STR `o` ($ ([SNull],ix0)) <$> anonTmpl <?> "expression")
+           `sepBy1` spaced (char '+')
     where cct xs@(x:y:z) = STR . (concatMap <$> showVal <*> sequence xs)
           cct (x:xs) = x
  
-braceConcat = (LI . foldr go []) `o` sequence <$> around '['(comlist attrib)']'
+braceConcat = LI . foldr go [] `o` sequence <$> around '['(comlist attrib)']'
     where go (LI x) lst = x++lst; go x lst = x:lst
 
 literal = justSTR <$> (around '"' (concat <$> many (escapedChar "\"")) '"'
@@ -292,7 +279,7 @@ attrib = do
          <?> "attribute"
   proprs <- props
   return (getProp proprs =<< a)
-      where prepExp var = fromMaybe SNull <$> (envLookup var)
+      where prepExp var = fromMaybe SNull <$> envLookup var
 
 functn = do
   f <- string "first" <|> string "rest" <|> string "strip"
@@ -313,18 +300,20 @@ functn = do
   Templates
 --------------------------------------------------------------------}
 
-mkIndex = map (((:) . STR . show . (1+)) <*> ((:[]) . STR . show))
+mkIndex = map ((:) . STR . show . (1+) <*> (:[]) . STR . show)
+ix0 = [STR "1",STR "0"]
 
-cycleApp = mconcat `o` (zipWith ($) . cycle)
+cycleApp = mconcat `o` zipWith ($) . cycle
 
-pluslen xs = zipWith (:) xs $ mkIndex [0..(length xs)]
+pluslen xs = zip (map (:[]) xs) $ mkIndex [0..(length xs)]
+
 liTrans = pluslen' . paddedTrans SNull . map u
     where u (LI x) = x; u x = [x]
-          pluslen' xss@(x:xs) = zipWith (++) xss $ mkIndex [0..(length x)]
+          pluslen' xss@(x:xs) = zip xss $ mkIndex [0..(length x)]
 
 iterApp (f:[]) (LI xs:[]) = STR . (pluslen xs >>=) . flip f
 iterApp (f:[]) vars@(LI xs:vs) = STR . (liTrans vars >>=) . flip f
-iterApp (f:[]) v = STR . f v
+iterApp (f:[]) v = STR . f (v,ix0)
 
 iterApp fs (LI xs:[]) = STR . cycleApp fs (pluslen xs)
 iterApp fs vars@(LI xs:vs) = STR . cycleApp fs (liTrans vars)
@@ -333,21 +322,22 @@ iterApp fs xs = STR . cycleApp fs (pluslen xs)
 anonTmpl = around '{' subStmp '}'
 
 regTemplate = do
-  (try functn >> fail "") <|> return ()
+  try functn .>> fail "" <|> return ()
   name <- justSTR <$> word <|> around '(' exprn ')'
   vals <- around '(' (spaced $ try assgn <|> anonassgn <|> return []) ')'
   return (join . (. name) . makeTmpl vals)
-      where makeTmpl v (se:i:i0:r) (STR x) =
-                toString . stBind (("it",const se):("i",const i):
-                                   ("i0",const i0):v) . stLookup x
+      where makeTmpl v ((se:_),is) (STR x) = 
+                toString |. stBind . (zip ["it","i","i0"] (se:is) ++)
+                            . swing (map . second) v <*> stLookup x
             makeTmpl _ _ _ = const "Invalid Template Specified"
-            anonassgn = ((:[]) . (,) "it" <$> exprn)
-            assgn = (spaced word >>= (<$> (char '=' >> spaced exprn)) . (,))
+            stBind v st = st {senv = foldr envInsert (senv st) v}
+            anonassgn = (:[]) . (,) "it" <$> exprn
+            assgn = (spaced word >>= (<$> char '=' .>> spaced exprn) . (,))
                     `sepEndBy1` char ';'
 
 --DEBUG
 rP p str = either (const . STR . show) id (parse p "input" str)
-tsM = M.insert "foo" ((LI [STR "f1"])) (M.singleton "bar" (LI [STR "barr",STR "baz"]))
+tsM = M.insert "foo" (LI [STR "f1"]) (M.singleton "bar" (LI [STR "barr",STR "baz"]))
 
 pTrace s = try $
          do

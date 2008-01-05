@@ -7,10 +7,12 @@ import qualified Data.Map as M
 import Numeric
 import Data.Maybe
 
---add bool instance where false is snull and true is STR ""
-
 instance ToSElem String where
     toSElem = STR
+
+instance ToSElem Bool where
+    toSElem True = STR ""
+    toSElem _ = SNull
 
 instance (ToSElem a) => ToSElem [a] where
     toSElem = LI . map toSElem 
@@ -31,5 +33,3 @@ instance StringTemplateShows Float where
 instance StringTemplateShows Double where
     stringTemplateShow = flip showFloat ""
     stringTemplateFormattedShow = flip flip [] . showGFloat . fmap fst . listToMaybe . reads
-
-

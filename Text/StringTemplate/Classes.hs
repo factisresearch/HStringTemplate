@@ -14,11 +14,13 @@ instance Monoid (First a) where
 	mempty = First Nothing
 	r@(First (Just _)) `mappend` _ = r
 	First Nothing `mappend` r = r
-
+--
 
 type SMap = M.Map String SElem
 
 data SElem = STR String |STSH STShow | SM SMap | LI [SElem] | SNull deriving (Eq, Ord, Show)
+
+--Todo replace STSH STShow with STSH String (String->String)
 
 class ToSElem a where
     toSElem :: a -> SElem
