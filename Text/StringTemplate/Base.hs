@@ -22,19 +22,26 @@ import qualified Data.Map as M
 
 import Text.StringTemplate.Classes
 import Debug.Trace --DEBUG
+import Text.StringTemplate.Instances -- DEBUG
 
 {--------------------------------------------------------------------
-  Utilities and Types
+  Generic Utilities
 --------------------------------------------------------------------}
 
 instance Applicative (GenParser tok st) where pure = return; (<*>) = ap;
 
 o = (.).(.)
+infixr 8 `o`
+
 (|.) f g x = f (g x)
+infixr 3 |.
+
 (.>>) f g = f >> g
 infixr 5 .>>
-infixr 3 |.
-infixr 8 `o`
+
+fromMany e f [] = e
+fromMany e f xs  = f xs
+
 intercalate = concat `o` intersperse
 swing = flip . (. flip id)
 paddedTrans n xs = take lx $ trans' xs
@@ -49,6 +56,7 @@ paddedTrans n xs = take lx $ trans' xs
   StringTemplate and the API
 --------------------------------------------------------------------}
 --add noInline to STFG
+--add provisions for options to groups
 
 -- | A Function that generates StringTemplates
 type STGen = String -> (First StringTemplate)
@@ -115,13 +123,28 @@ cacheSTGroup m g = unsafePerformIO $ go <$> newIORef M.empty
                       (\(t, st) -> if (tdSec . normalizeTimeDiff $
                            diffClockTimes now t) > m
                          then udReturn mp now
-                         else return $ First . Just $ st)
+                         else return . First . Just $ st)
                       . M.lookup s $ mp
               where udReturn mp now = maybe (return $ First Nothing)
                                       (\st -> do
                                          atomicModifyIORef r $
                                           flip (,) () . M.insert s (now, st)
-                                         return $ First . Just $ st)
+                                         return . First . Just $ st)
+                                      . getFirst . g $ s
+
+-- | Returns a group cached forever.
+cacheSTGroupForever :: STGen -> STGen
+cacheSTGroupForever g = unsafePerformIO $ go <$> newIORef M.empty
+    where go r s = unsafePerformIO $ do
+                     mp <- readIORef r
+                     maybe (udReturn mp)
+                      (return . First . Just)
+                      . M.lookup s $ mp
+              where udReturn mp = maybe (return $ First Nothing)
+                                      (\st -> do
+                                         atomicModifyIORef r $
+                                          flip (,) () . M.insert s st
+                                         return . First . Just $ st)
                                       . getFirst . g $ s
 
 {--------------------------------------------------------------------
@@ -156,7 +179,7 @@ showVal snv se =
           format = maybe stshow . stfshow <*> optLookup "format" $ snv
           joinUp = intercalate (showVal snv sepVal) . map (showVal snv)
 
-parseSTMP x = either (const . show) id . runParser stmpl x "in"
+parseSTMP x = either (const . show) id . runParser (stmpl False) x ""
 
 {--------------------------------------------------------------------
   Utility Combinators
@@ -177,15 +200,20 @@ escapedChar chs =
     if y `elem` chs then return [y] else return [x, y] else return [x]
 escapedStr chs = concat <$> many1 (escapedChar chs)
 
+maybeOpt x = option Nothing (Just <$> x)
+
 {--------------------------------------------------------------------
   The Grammar
 --------------------------------------------------------------------}
 
-stmpl :: GenParser Char (Char,Char) (SEnv -> String)
-stmpl= do
+-- | if p is true, stmpl can fail gracefully, false it dies hard.
+-- Set to false at the top level, and true within if expressions.
+stmpl :: Bool -> GenParser Char (Char,Char) (SEnv -> String)
+stmpl p = do
   (ca, cb) <- getState
-  mconcat <$> many1 (const <$> escapedStr (ca:[]) <|>
-                     try (around ca optExpr cb) <|> try comment <?> "template")
+  mconcat <$> many (const <$> escapedStr (ca:[]) <|> try (around ca optExpr cb) 
+                    <|> try comment <|> bl <?> "template")
+      where bl | p = try blank | otherwise = blank
 
 subStmp = do
   (ca, cb) <-getState
@@ -203,31 +231,37 @@ comment = do
   string (ca:'!':[]) >> manyTill anyChar (try . string $ '!':cb:[])
   return (const "")
 
+blank = do
+  (ca, cb) <- getState
+  char ca
+  spaces
+  char cb
+  return (const "")
+
 optExpr = do
   (ca, cb) <- getState
   (try (string ("else"++[cb])) <|> try (string "elseif(") <|>
     try (string "endif")) .>> fail "Malformed If Statement." <|> return ()
   (expr,opts) <- liftM2 (,) (spaced exprn) (many opt)
   skipMany (char ';')
-  return ((showVal <*> expr) . optInsert opts)
+  return $ showVal <*> expr |. optInsert opts
       where opt = around ';' (spaced word) '=' >>= (<$> spaced exprn) . (,)
 
 {--------------------------------------------------------------------
   Statements
 --------------------------------------------------------------------}
 
-getProp (p:ps) (SM mp) = maybe <$> const SNull <*> flip (getProp ps)
-                         <*> (flip M.lookup mp |. showVal <*> p)
+getProp (p:ps) (SM mp) = maybe SNull . flip (getProp ps) <*>
+                          flip M.lookup mp . ap showVal p
 getProp (p:ps) _ = const SNull
 getProp _ se = const se
 
 ifIsSet t e n SNull = if n then e else t
 ifIsSet t e n _ = if n then t else e
 
-substat = try elseifstat <|> try elsestat <|> endifstat
-
-parseif cb = (,,,,,) <$> option True (char '!' >> return False) <*> exprn <*>
-           props <*> char ')' .>> char cb <*> stmpl <*> substat
+parseif cb = (,,,,,) <$> option True (char '!' >> return False) <*> exprn 
+             <*> props <*> char ')' .>> char cb <*> stmpl True <*>
+             (try elseifstat <|> try elsestat <|> endifstat)
 
 stat = do
   (ca, cb) <- getState
@@ -244,7 +278,7 @@ elseifstat = do
 elsestat = do
   (ca, cb) <- getState
   around ca (string "else") cb
-  act <- stmpl
+  act <- stmpl True
   char ca >> string "endif"
   return act
 
@@ -257,9 +291,10 @@ endifstat = getState >>= char . fst >> string "endif" >> return (const "")
 exprn :: GenParser Char (Char,Char) (SEnv -> SElem)
 exprn = do
   exprs <- (:[]) <$> try stat <|> comlist subexprn <?> "expression"
-  templ <- option (const . head)
-           (char ':' >> iterApp <$> comlist (anonTmpl <|> regTemplate))
-  return (templ =<< sequence exprs)
+  templ <- many (char ':' >> iterApp <$> comlist (anonTmpl <|> regTemplate))
+  return $ fromMany (head exprs) ((sequence exprs >>=) . seqTmpls) templ
+    where seqTmpls [f]    y = f y
+          seqTmpls (f:fs) y = seqTmpls fs =<< return . f y
 
 subexprn = cct <$> spaced
             (braceConcat <|> STR `o` ($ ([SNull],ix0)) <$> try regTemplate <|>
@@ -278,7 +313,7 @@ attrib = do
   a <- literal <|> try functn <|> prepExp <$> word <|> around '(' exprn ')'
          <?> "attribute"
   proprs <- props
-  return (getProp proprs =<< a)
+  return $ fromMany a ((a >>=) . getProp) proprs
       where prepExp var = fromMaybe SNull <$> envLookup var
 
 functn = do
@@ -325,7 +360,7 @@ regTemplate = do
   try functn .>> fail "" <|> return ()
   name <- justSTR <$> word <|> around '(' exprn ')'
   vals <- around '(' (spaced $ try assgn <|> anonassgn <|> return []) ')'
-  return (join . (. name) . makeTmpl vals)
+  return $ join . (. name) . makeTmpl vals
       where makeTmpl v ((se:_),is) (STR x) = 
                 toString |. stBind . (zip ["it","i","i0"] (se:is) ++)
                             . swing (map . second) v <*> stLookup x
@@ -339,8 +374,9 @@ regTemplate = do
 rP p str = either (const . STR . show) id (parse p "input" str)
 tsM = M.insert "foo" (LI [STR "f1"]) (M.singleton "bar" (LI [STR "barr",STR "baz"]))
 
-pTrace s = try $
-         do
-           x <- try $ many1 anyChar
-           trace (s++": " ++x) $ try $ char 'z'
-           fail x
+pTrace s = pt <|> return ()
+    where pt = try $
+               do
+                 x <- try $ many1 anyChar
+                 trace (s++": " ++x) $ try $ char 'z'
+                 fail x
