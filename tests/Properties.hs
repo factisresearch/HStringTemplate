@@ -2,7 +2,7 @@
 
 --QuickCheck driver is lifted wholesale from XMonad
 
-module Text.StringTemplate.Test where
+module Properties where
 import Text.Printf
 import Control.Monad
 import Control.Arrow hiding (pure)
@@ -29,38 +29,67 @@ main = do
     when (not . and $ results) $ fail "Not all tests passed!"
  where
     tests =
-        [("prop_constStr" , mytest prop_constStr),
+        [("prop_paddedTrans" , mytest prop_paddedTrans),
+         ("prop_constStr" , mytest prop_constStr),
          ("prop_emptyNulls" , mytest prop_emptyNulls),
-         ("prop_fullNulls" , mytest prop_fullNulls)
+         ("prop_fullNulls" , mytest prop_fullNulls),
+         ("prop_substitution" , mytest prop_substitution),
+         ("prop_seperator" , mytest prop_seperator)
         ]
 
-prop_constStr x = x' == (toString . newSTMP $ x')
-    where x' = map unLitChar x
+{-----------------------------------------------------------------------
+  Limited tests for now: just for list juggling and some basic parsing.
+-----------------------------------------------------------------------}
 
-prop_emptyNulls x y (i::Int) = (concat . replicate i $ x') ==
-                            (toString . newSTMP . concat . replicate i $ z)
-    where x' = map unLitChar x
-          y' = map unLitChar y
-          z = x'++"$"++y'++"$"
+prop_paddedTrans (x::[Int]) (y::[Int]) (z::[Int]) n =
+   (length pt == length npt) &&
+   all (3 ==) (map length pt) &&
+   all (all (==n)) (zipWith unmerge (paddedTrans n pt) [x,y,z])
+          where pt   = paddedTrans n [x,y,z] 
+                npt  = transpose [x,y,z]
+                unmerge xl@(x:xs) (y:ys)
+                    | x == y = unmerge xs ys
+                    | otherwise = xl
+                unmerge x y = x
 
-prop_fullNulls x y (i::Int) = length y > 0 ==>
-                             (concat . replicate i $ x'++y') ==
-                             (toString . newSTMP . concat . replicate i $ z)
-    where x' = map unLitChar x
-          y' = map unLitChar y
-          z = x'++"$"++y'++";null='"++y'++"'$"
+prop_constStr (LitString x) = x == (toString . newSTMP $ x)
 
-newtype LitChar = LitChar Char deriving Show
-unLitChar (LitChar x) = x
+prop_emptyNulls (LitString x) (LitString y) i =
+    (concat . replicate (abs i) $ x) ==
+      (toString . newSTMP . concat . replicate (abs i) $ tmpl)
+    where tmpl = x++"$"++y++"$"
+
+prop_fullNulls (LitString x) (LitString y) i =
+    length y > 0 ==>
+               (concat . replicate (abs i) $ x++y) ==
+               (toString . newSTMP . concat . replicate (abs i) $ tmpl)
+    where tmpl = x++"$"++y++";null='"++y++"'$"
+
+prop_substitution (LitString x) (LitString y) (LitString z) i =
+    length y > 0 ==>
+               (concat . replicate (abs i) $ x++z) ==
+               (toString . setAttribute y z .
+                newSTMP . concat . replicate (abs i) $ tmpl)
+    where tmpl = x++"$"++y++"$"
+
+prop_seperator (LitString x) (LitString y) (LitString z) i =
+    length x > 0 ==>
+               (concat . intersperse z . replicate (abs i) $ y) ==
+               (toString . setAttribute x (replicate (abs i) y)
+                . newSTMP $ tmpl)
+    where tmpl = "$"++x++";seperator='"++z++"'$"
+
+newtype LitChar = LitChar {unLitChar :: Char} deriving Show
 instance Arbitrary LitChar where
-  arbitrary = do
-      x <- choose ('a','z')
-      return $ LitChar x
+  arbitrary = LitChar <$> choose ('a','z')
 
+newtype LitString = LitString String deriving Show
+instance Arbitrary LitString where
+    arbitrary =
+        LitString . map unLitChar <$> sized (\n -> choose (0,n) >>= vector)
 
 {--------------------------------------------------------------------
-  QuickCheck Driver: This freaking awesome code borrowed wholesale
-    from XMonad.
+  QuickCheck Driver: This lovely code borrowed wholesale from XMonad.
 --------------------------------------------------------------------}
 
 mytest :: Testable a => a -> Int -> IO (Bool, Int)

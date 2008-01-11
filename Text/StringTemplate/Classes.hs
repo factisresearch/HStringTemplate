@@ -15,6 +15,8 @@ instance Monoid (First a) where
 	r@(First (Just _)) `mappend` _ = r
 	First Nothing `mappend` r = r
 --
+instance Functor First where
+    fmap f x = First . fmap f . getFirst $ x
 
 type SMap = M.Map String SElem
 

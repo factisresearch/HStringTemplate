@@ -7,6 +7,14 @@ import qualified Data.Map as M
 import Numeric
 import Data.Maybe
 
+{--------------------------------------------------------------------
+  Additional instances for items that may be set as StringTemplate
+  attributes. The code should provide examples of how to proceed.
+--------------------------------------------------------------------}
+--Todo: provide instances of ToSElem for all Folddable
+--Todo: provide instances of StringTemplateShows for dates
+--      and other common cases.
+
 instance ToSElem String where
     toSElem = STR
 

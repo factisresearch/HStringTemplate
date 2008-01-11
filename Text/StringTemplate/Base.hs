@@ -4,7 +4,7 @@ module Text.StringTemplate.Base
     (StringTemplate, toString, newSTMP, newAngleSTMP, 
      StringTemplateShows(..), ToSElem(..), STGen, setAttribute,
      groupStringTemplates, addSuperGroup, addSubGroup, mergeSTGroups,
-     stringTemplateFileGroup, cacheSTGroup
+     stringTemplateFileGroup, cacheSTGroup, paddedTrans
     ) where
 import Control.Monad
 import Control.Arrow hiding (pure)
@@ -21,8 +21,8 @@ import System.IO.Unsafe
 import qualified Data.Map as M
 
 import Text.StringTemplate.Classes
-import Debug.Trace --DEBUG
-import Text.StringTemplate.Instances -- DEBUG
+--import Debug.Trace --DEBUG
+--import Text.StringTemplate.Instances -- DEBUG
 
 {--------------------------------------------------------------------
   Generic Utilities
@@ -39,16 +39,19 @@ infixr 3 |.
 (.>>) f g = f >> g
 infixr 5 .>>
 
+(<$$>) x y = ((<$>) . (<$>)) x y
+
 fromMany e f [] = e
 fromMany e f xs  = f xs
 
 intercalate = concat `o` intersperse
 swing = flip . (. flip id)
-paddedTrans n xs = take lx $ trans' xs
-    where lx = maximum (map length xs)
-          trans' [] = []
-          trans' ([]:xss)  = trans' xss
-          trans' ((x:xs) : xss) = (x : map h xss) : trans' (m xs:(map t xss))
+
+paddedTrans n [] = []
+paddedTrans n xs = take (maximum . map length $ xs) . trans $ xs
+    where trans [] = [];
+          trans ([] : xss)  = (n : map h xss) :  trans ([n] : (map t xss))
+          trans ((x : xs) : xss) = (x : map h xss) : trans (m xs : (map t xss))
           h (x:xs) = x; h _ = n; t (x:y:xs) = (y:xs); t _ = [n];
           m (x:xs) = (x:xs); m _ = [n];
 
@@ -91,29 +94,33 @@ groupStringTemplates xs = newGen
           ng = foldl' (flip $ uncurry M.insert) M.empty $
                map (second $ sgInsert newGen) xs
 
--- | Adds a supergroup to any StringTemplate group such that templates from
--- the original group are now able to call ones from the supergroup as well.
-addSuperGroup :: STGen -> STGen -> STGen
-addSuperGroup f g = First . maybe Nothing (Just . sgInsert g) . getFirst . f
-
--- | Adds a "subgroup" to any StringTemplate group such that templates from
--- the original group now have template calls "shadowed" by the subgroup.
-addSubGroup :: STGen -> STGen -> STGen
-addSubGroup f g = First . maybe Nothing (Just . sgOverride g) . getFirst . f
-
--- | Merges two groups into a single group. This function is left-biased,
--- prefering bindings from the first group when there is a conflict.
-mergeSTGroups :: STGen -> STGen -> STGen
-mergeSTGroups f g = addSuperGroup f g `mappend` addSubGroup g f
-
 -- | Given a path, returns a group which generates all files in said directory.
 stringTemplateFileGroup :: String -> STGen
 stringTemplateFileGroup path = stfg
   where stfg =  First . Just . STMP (SEnv M.empty [] stfg) .
                 parseSTMP ('$','$') . unsafePerformIO . readFile . (path </>)
 
+-- | Adds a set of global options to a group
+optInsertGroup :: [(String, String)] -> STGen -> STGen
+optInsertGroup opts f = optInsertTmpl (map (second justSTR) opts) <$$> f
+
+-- | Adds a supergroup to any StringTemplate group such that templates from
+-- the original group are now able to call ones from the supergroup as well.
+addSuperGroup :: STGen -> STGen -> STGen
+addSuperGroup f g = sgInsert g <$$> f
+
+-- | Adds a "subgroup" to any StringTemplate group such that templates from
+-- the original group now have template calls "shadowed" by the subgroup.
+addSubGroup :: STGen -> STGen -> STGen
+addSubGroup f g = sgOverride g <$$> f
+
+-- | Merges two groups into a single group. This function is left-biased,
+-- prefering bindings from the first group when there is a conflict.
+mergeSTGroups :: STGen -> STGen -> STGen
+mergeSTGroups f g = addSuperGroup f g `mappend` addSubGroup g f
+
 -- | Given an integral amount of seconds and a group, returns a group cached for
--- that span of time.
+-- that span of time. Does not cache "misses."
 cacheSTGroup :: Int -> STGen -> STGen
 cacheSTGroup m g = unsafePerformIO $ go <$> newIORef M.empty
     where go r s = unsafePerformIO $ do
@@ -123,35 +130,37 @@ cacheSTGroup m g = unsafePerformIO $ go <$> newIORef M.empty
                       (\(t, st) -> if (tdSec . normalizeTimeDiff $
                            diffClockTimes now t) > m
                          then udReturn mp now
-                         else return . First . Just $ st)
+                         else return st)
                       . M.lookup s $ mp
-              where udReturn mp now = maybe (return $ First Nothing)
+              where udReturn mp now = maybe (return found)
                                       (\st -> do
                                          atomicModifyIORef r $
-                                          flip (,) () . M.insert s (now, st)
-                                         return . First . Just $ st)
-                                      . getFirst . g $ s
+                                          flip (,) () . M.insert s (now, found)
+                                         return found)
+                                      . getFirst $ found
+                        where found = g s
 
--- | Returns a group cached forever.
+-- | Returns a group cached forever. Caches "misses" as well as hits.
 cacheSTGroupForever :: STGen -> STGen
 cacheSTGroupForever g = unsafePerformIO $ go <$> newIORef M.empty
     where go r s = unsafePerformIO $ do
                      mp <- readIORef r
                      maybe (udReturn mp)
-                      (return . First . Just)
-                      . M.lookup s $ mp
-              where udReturn mp = maybe (return $ First Nothing)
-                                      (\st -> do
-                                         atomicModifyIORef r $
-                                          flip (,) () . M.insert s st
-                                         return . First . Just $ st)
-                                      . getFirst . g $ s
+                      return . M.lookup s $ mp
+              where udReturn mp = do
+                                  let st = g s
+                                  atomicModifyIORef r $
+                                   flip (,) () . M.insert s st
+                                  return st
 
 {--------------------------------------------------------------------
   Internal API
 --------------------------------------------------------------------}
 --TODO we ignore wrap, anchor and format options, as well as indentation
---Switch to using ShowS for performance?
+--IMPLEMENT groups having stLookup return a Maybe for regions
+--Make showVal polymorphic in its return type
+--parameterize the mconcat via the enviornment such that we handle returning
+--pretty printing values, strings, or ShowS values (not to mention traces)
 
 data SEnv = SEnv {smp :: SMap, sopts :: [(String, SEnv -> SElem)], sgen :: STGen}
 
@@ -163,6 +172,7 @@ envInsApp  s  x  y = y {smp = M.insertWith app s x (smp y)}
 
 optLookup x = lookup x . sopts
 optInsert x env = env {sopts = x ++ sopts env}
+optInsertTmpl x st = st {senv = optInsert x (senv st)}
 nullOpt = fromMaybe (justSTR "") =<< optLookup "null"
 
 stLookup x env = maybe (newSTMP ("No Template Found for: " ++ x))
@@ -178,6 +188,8 @@ showVal snv se =
     where sepVal = fromMaybe (justSTR "") =<< optLookup "seperator" $ snv
           format = maybe stshow . stfshow <*> optLookup "format" $ snv
           joinUp = intercalate (showVal snv sepVal) . map (showVal snv)
+
+showStr = flip showVal . STR
 
 parseSTMP x = either (const . show) id . runParser (stmpl False) x ""
 
@@ -200,8 +212,6 @@ escapedChar chs =
     if y `elem` chs then return [y] else return [x, y] else return [x]
 escapedStr chs = concat <$> many1 (escapedChar chs)
 
-maybeOpt x = option Nothing (Just <$> x)
-
 {--------------------------------------------------------------------
   The Grammar
 --------------------------------------------------------------------}
@@ -211,16 +221,16 @@ maybeOpt x = option Nothing (Just <$> x)
 stmpl :: Bool -> GenParser Char (Char,Char) (SEnv -> String)
 stmpl p = do
   (ca, cb) <- getState
-  mconcat <$> many (const <$> escapedStr (ca:[]) <|> try (around ca optExpr cb) 
+  mconcat <$> many (showStr <$> escapedStr [ca] <|> try (around ca optExpr cb) 
                     <|> try comment <|> bl <?> "template")
       where bl | p = try blank | otherwise = blank
 
 subStmp = do
-  (ca, cb) <-getState
-  udEnv <-option (transform ["it"])
-           (transform <$> try attribNames)
-  st <-mconcat <$> many (const <$> escapedStr (ca:"}|") <|> around ca optExpr cb
-                          <|> try comment <?> "subtemplate")
+  (ca, cb) <- getState
+  udEnv <- option (transform ["it"]) (transform <$> try attribNames)
+  st <- mconcat <$> many (showStr <$> escapedStr (ca:"}|")
+                         <|> try (around ca optExpr cb)
+                         <|> try comment <|> blank <?> "subtemplate")
   return (st `o` udEnv)
       where transform an (att,i:i0:[]) = 
                 flip (foldr envInsert) $ zip ("i":"i0":an) (i:i0:att)
@@ -229,20 +239,20 @@ subStmp = do
 comment = do
   (ca, cb) <- getState
   string (ca:'!':[]) >> manyTill anyChar (try . string $ '!':cb:[])
-  return (const "")
+  return (showStr "")
 
 blank = do
   (ca, cb) <- getState
   char ca
   spaces
   char cb
-  return (const "")
+  return (showStr "")
 
 optExpr = do
   (ca, cb) <- getState
   (try (string ("else"++[cb])) <|> try (string "elseif(") <|>
     try (string "endif")) .>> fail "Malformed If Statement." <|> return ()
-  (expr,opts) <- liftM2 (,) (spaced exprn) (many opt)
+  (expr, opts) <- liftM2 (,) (spaced exprn) (many opt)
   skipMany (char ';')
   return $ showVal <*> expr |. optInsert opts
       where opt = around ';' (spaced word) '=' >>= (<$> spaced exprn) . (,)
@@ -282,7 +292,7 @@ elsestat = do
   char ca >> string "endif"
   return act
 
-endifstat = getState >>= char . fst >> string "endif" >> return (const "")
+endifstat = getState >>= char . fst >> string "endif" >> return (showStr "")
 
 {--------------------------------------------------------------------
   Expressions
@@ -364,15 +374,13 @@ regTemplate = do
       where makeTmpl v ((se:_),is) (STR x) = 
                 toString |. stBind . (zip ["it","i","i0"] (se:is) ++)
                             . swing (map . second) v <*> stLookup x
-            makeTmpl _ _ _ = const "Invalid Template Specified"
+            makeTmpl _ _ _ = showStr "Invalid Template Specified"
             stBind v st = st {senv = foldr envInsert (senv st) v}
             anonassgn = (:[]) . (,) "it" <$> exprn
             assgn = (spaced word >>= (<$> char '=' .>> spaced exprn) . (,))
                     `sepEndBy1` char ';'
 
---DEBUG
-rP p str = either (const . STR . show) id (parse p "input" str)
-tsM = M.insert "foo" (LI [STR "f1"]) (M.singleton "bar" (LI [STR "barr",STR "baz"]))
+{- DEBUG
 
 pTrace s = pt <|> return ()
     where pt = try $
@@ -380,3 +388,4 @@ pTrace s = pt <|> return ()
                  x <- try $ many1 anyChar
                  trace (s++": " ++x) $ try $ char 'z'
                  fail x
+-}
