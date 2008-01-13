@@ -1,11 +1,10 @@
-{-# OPTIONS -O2 -fglasgow-exts -optc-O3 #-}
+{-# OPTIONS -O2 -fglasgow-exts #-}
 module Text.StringTemplate.Classes
     (SElem(..), StringTemplateShows(..), ToSElem(..), SMap, STShow(..),
      First(..)
     ) where
 import qualified Data.Map as M
 import Data.Monoid
-
 
 --For 6.6.1 ONLY
 newtype First a = First { getFirst :: Maybe a }
@@ -20,9 +19,7 @@ instance Functor First where
 
 type SMap = M.Map String SElem
 
-data SElem = STR String |STSH STShow | SM SMap | LI [SElem] | SNull deriving (Eq, Ord, Show)
-
---Todo replace STSH STShow with STSH String (String->String)
+data SElem = STR String | STSH STShow | SM SMap | LI [SElem] | SNull deriving (Eq, Ord, Show)
 
 class ToSElem a where
     toSElem :: a -> SElem
@@ -42,4 +39,3 @@ instance Ord STShow where
 
 instance Show STShow where
     show (STShow a) = "STShow "++show a
-
