@@ -2,23 +2,23 @@
 {-# OPTIONS_HADDOCK not-home #-}
 module Text.StringTemplate.Classes
     (SElem(..), StringTemplateShows(..), ToSElem(..), SMap, STShow(..),
-     First(..), Stringable(..)
+     StFirst(..), Stringable(..)
     ) where
 import qualified Data.Map as M
 import Data.List
-import Data.Monoid hiding (First, getFirst)
+import Data.Monoid
 
-#if __GLASGOW_HASKELL__ <= 680
-newtype First a = First { getFirst :: Maybe a }
+
+newtype StFirst a = StFirst { stGetFirst :: Maybe a }
         deriving (Eq, Ord, Read, Show)
-instance Monoid (First a) where
-        mempty = First Nothing
-        r@(First (Just _)) `mappend` _ = r
-        First Nothing `mappend` r = r
-#endif
+instance Monoid (StFirst a) where
+        mempty = StFirst Nothing
+        r@(StFirst (Just _)) `mappend` _ = r
+        StFirst Nothing `mappend` r = r
 
-instance Functor First where
-    fmap f x = First . fmap f . getFirst $ x
+
+instance Functor StFirst where
+    fmap f x = StFirst . fmap f . stGetFirst $ x
 
 type SMap = M.Map String SElem
 

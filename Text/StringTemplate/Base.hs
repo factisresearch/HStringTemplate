@@ -13,7 +13,7 @@ import Control.Monad
 import Control.Arrow hiding (pure)
 import Control.Applicative hiding ((<|>),many)
 import Data.Maybe
-import Data.Monoid hiding (First, getFirst)
+import Data.Monoid
 import Data.List
 import Text.ParserCombinators.Parsec
 import System.Time
@@ -74,7 +74,7 @@ paddedTrans n as = take (maximum . map length $ as) . trans $ as
 
 -- | A function that generates StringTemplates.
 -- | This is conceptually a query function into a \"group\" of StringTemplates.
-type STGen a = String -> (First (StringTemplate a))
+type STGen a = String -> (StFirst (StringTemplate a))
 
 -- | A String with \"holes\" in it. StringTemplates may be composed of any
 -- "Stringable" type, which at the moment includes 'String's, 'ByteString's,
@@ -110,14 +110,14 @@ setAttribute s x st = st {senv = envInsApp s (toSElem x) (senv st)}
 -- them such that they can call one another.
 groupStringTemplates :: [(String,StringTemplate a)] -> STGen a
 groupStringTemplates xs = newGen
-    where newGen s = First (M.lookup s ng)
+    where newGen s = StFirst (M.lookup s ng)
           ng = foldl' (flip $ uncurry M.insert) M.empty $
                map (second $ sgInsert newGen) xs
 
 -- | Given a path, returns a group which generates all files in said directory.
 stringTemplateFileGroup :: Stringable a => String -> STGen a
 stringTemplateFileGroup path = stfg
-    where stfg = First . Just . STMP (SEnv M.empty [] stfg) .
+    where stfg = StFirst . Just . STMP (SEnv M.empty [] stfg) .
                  parseSTMP ('$', '$') . unsafePerformIO . readFile . (path </>)
 
 -- | Adds a set of global options to a group
@@ -161,7 +161,7 @@ cacheSTGroup m g = unsafePerformIO $ go <$> newIORef M.empty
                                       atomicModifyIORef r $
                                          flip (,) () . M.insert s (now, found)
                                       return found)
-                                     . getFirst $ found
+                                     . stGetFirst $ found
                         where found = g s
 
 -- | Returns a group cached forever. Caches \"misses\" as well as hits.
@@ -205,9 +205,9 @@ nullOpt = fromMaybe (justSTR "") =<< optLookup "null"
 
 stLookup :: (Stringable a) => [Char] -> SEnv a -> StringTemplate a
 stLookup x env = maybe (newSTMP ("No Template Found for: " ++ x))
-                 (\st-> st {senv = env}) $ getFirst (sgen env x)
+                 (\st-> st {senv = env}) $ stGetFirst (sgen env x)
 
-sgInsert :: (String -> First (StringTemplate a)) -> StringTemplate a -> StringTemplate a
+sgInsert :: (String -> StFirst (StringTemplate a)) -> StringTemplate a -> StringTemplate a
 sgInsert   g st = let e = senv st in st {senv = e {sgen = sgen e `mappend` g} }
 sgOverride :: STGen a -> StringTemplate a -> StringTemplate a
 sgOverride g st = let e = senv st in st {senv = e {sgen = g `mappend` sgen e} }
