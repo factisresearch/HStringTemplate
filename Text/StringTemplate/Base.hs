@@ -1,7 +1,7 @@
 {-# OPTIONS -O2 -fbang-patterns -fglasgow-exts -fno-monomorphism-restriction #-}
 
 module Text.StringTemplate.Base
-    (StringTemplate, toString, toPPDoc,
+    (StringTemplate, toString, toPPDoc, render,
      newSTMP, newAngleSTMP, StringTemplateShows(..), ToSElem(..), STGen,
      setAttribute, groupStringTemplates, addSuperGroup, addSubGroup,
      mergeSTGroups, stringTemplateFileGroup, cacheSTGroup, cacheSTGroupForever,
@@ -24,8 +24,8 @@ import qualified Data.ByteString.Char8 as B
 import qualified Text.PrettyPrint.HughesPJ as PP
 
 import Text.StringTemplate.Classes
-import Debug.Trace --DEBUG
-import Text.StringTemplate.Instances -- DEBUG
+--import Debug.Trace --DEBUG
+import Text.StringTemplate.Instances()
 
 {--------------------------------------------------------------------
   Generic Utilities
@@ -44,17 +44,17 @@ infixr 5 .>>
 
 (<$$>) x y = ((<$>) . (<$>)) x y
 
-fromMany e f [] = e
-fromMany e f xs  = f xs
+fromMany e _ [] = e
+fromMany _ f xs  = f xs
 
 swing = flip . (. flip id)
 
-paddedTrans n [] = []
-paddedTrans n xs = take (maximum . map length $ xs) . trans $ xs
+paddedTrans _ [] = []
+paddedTrans n as = take (maximum . map length $ as) . trans $ as
     where trans [] = [];
           trans ([] : xss)  = (n : map h xss) :  trans ([n] : (map t xss))
           trans ((x : xs) : xss) = (x : map h xss) : trans (m xs : (map t xss))
-          h (x:xs) = x; h _ = n; t (x:y:xs) = (y:xs); t _ = [n];
+          h (x:_) = x; h _ = n; t (_:y:xs) = (y:xs); t _ = [n];
           m (x:xs) = (x:xs); m _ = [n];
 
 {--------------------------------------------------------------------
@@ -136,18 +136,18 @@ cacheSTGroup m g = unsafePerformIO $ go <$> newIORef M.empty
     where go r s = unsafePerformIO $ do
                      mp <- readIORef r
                      now <- getClockTime
-                     maybe (udReturn mp now)
+                     maybe (udReturn now)
                       (\(t, st) -> if (tdSec . normalizeTimeDiff $
                            diffClockTimes now t) > m
-                         then udReturn mp now
+                         then udReturn now
                          else return st)
                       . M.lookup s $ mp
-              where udReturn mp now = maybe (return found)
-                                      (\st -> do
-                                         atomicModifyIORef r $
-                                          flip (,) () . M.insert s (now, found)
-                                         return found)
-                                      . getFirst $ found
+              where udReturn now = maybe (return found)
+                                   (\st -> do
+                                      atomicModifyIORef r $
+                                         flip (,) () . M.insert s (now, found)
+                                      return found)
+                                     . getFirst $ found
                         where found = g s
 
 -- | Returns a group cached forever. Caches "misses" as well as hits.
@@ -155,13 +155,13 @@ cacheSTGroupForever :: STGen a -> STGen a
 cacheSTGroupForever g = unsafePerformIO $ go <$> newIORef M.empty
     where go r s = unsafePerformIO $ do
                      mp <- readIORef r
-                     maybe (udReturn mp)
+                     maybe udReturn
                       return . M.lookup s $ mp
-              where udReturn mp = do
-                                  let st = g s
-                                  atomicModifyIORef r $
-                                   flip (,) () . M.insert s st
-                                  return st
+              where udReturn = do
+                                let st = g s
+                                atomicModifyIORef r $
+                                  flip (,) () . M.insert s st
+                                return st
 
 {--------------------------------------------------------------------
   Internal API
@@ -175,9 +175,9 @@ render = runSTMP <*> senv
 
 envLookup x = M.lookup x . smp
 envInsert (s, x) y = y {smp = M.insert s x (smp y)}
-envInsApp  s  x  y = y {smp = M.insertWith app s x (smp y)}
-    where app x (LI ys) = LI (x:ys)
-          app x y = LI [x,y]
+envInsApp  s  x  y = y {smp = M.insertWith go s x (smp y)}
+    where go a (LI bs) = LI (a:bs)
+          go a b = LI [a,b]
 
 optLookup x = lookup x . sopts
 optInsert x env = env {sopts = x ++ sopts env}
@@ -190,7 +190,7 @@ sgInsert   g st = let e = senv st in st {senv = e {sgen = sgen e `mappend` g} }
 sgOverride g st = let e = senv st in st {senv = e {sgen = g `mappend` sgen e} }
 
 parseSTMP :: (Stringable a) => (Char, Char) -> String -> SEnv a -> a
-parseSTMP x = trace "yo" $ either (showStr .  show) (id) . runParser (stmpl False) x ""
+parseSTMP x = either (showStr .  show) (id) . runParser (stmpl False) x ""
 
 {--------------------------------------------------------------------
   Internal API for polymorphic display of elements
@@ -304,7 +304,7 @@ blank = do
 
 optExpr :: Stringable a => GenParser Char (Char,Char) (SEnv a -> a)
 optExpr = do
-  (ca, cb) <- getState
+  (_, cb) <- getState
   (try (string ("else"++[cb])) <|> try (string "elseif(") <|>
     try (string "endif")) .>> fail "Malformed If Statement." <|> return ()
   expr <- try stat <|> spaced exprn
@@ -320,7 +320,7 @@ optExpr = do
 getProp :: (Stringable a) => [SEnv a -> SElem] -> SElem -> SEnv a -> SElem
 getProp (p:ps) (SM mp) = maybe SNull . flip (getProp ps) <*>
                           flip M.lookup mp . ap (stToString `o` showVal) p
-getProp (p:ps) _ = const SNull
+getProp (_:_) _ = const SNull
 getProp _ se = const se
 
 ifIsSet t e n SNull = if n then e else t
@@ -332,7 +332,7 @@ parseif cb = (,,,,,) <$> option True (char '!' >> return False) <*> subexprn
 
 stat ::Stringable a => GenParser Char (Char, Char) (SEnv a -> a)
 stat = do
-  (ca, cb) <- getState
+  (_, cb) <- getState
   string "if("
   (n, e, p, _, act, cont) <- parseif cb
   return (ifIsSet act cont n =<< getProp p =<< e)
@@ -383,9 +383,9 @@ subexprn = cct <$> spaced
              <|> STR . stToString `o` ($ ([SNull],ix0)) <$> anonTmpl
              <?> "expression")
            `sepBy1` spaced (char '+')
-    where cct xs@(x:y:z) = STR . stToString |.
+    where cct xs@(_:_:_) = STR . stToString |.
                            flip mconcatMap <$> showVal <*> sequence xs
-          cct (x:xs) = x
+          cct [x] = x
 
 braceConcat :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem) 
 braceConcat = LI . foldr go [] `o` sequence <$> around '['(comlist subexprn)']'
@@ -435,14 +435,14 @@ pluslen xs = zip (map (:[]) xs) $ mkIndex [0..(length xs)]
 liTrans :: [SElem] -> [([SElem], [SElem])]
 liTrans = pluslen' . paddedTrans SNull . map u
     where u (LI x) = x; u x = [x]
-          pluslen' xss@(x:xs) = zip xss $ mkIndex [0..(length x)]
+          pluslen' xss@(x:_) = zip xss $ mkIndex [0..(length x)]
 
 iterApp :: (Stringable a) => [([SElem], [SElem]) -> SEnv a -> a] -> [SElem] -> SEnv a -> a
 iterApp [f] (LI xs:[]) = (mconcatMap $ pluslen xs) . flip f
-iterApp [f] vars@(LI xs:vs) = (mconcatMap $ liTrans vars) . flip f
+iterApp [f] vars@(LI _:_) = (mconcatMap $ liTrans vars) . flip f
 iterApp [f] v = f (v,ix0)
 iterApp fs (LI xs:[]) = cycleApp fs (pluslen xs)
-iterApp fs vars@(LI xs:vs) = cycleApp fs (liTrans vars)
+iterApp fs vars@(LI _:_) = cycleApp fs (liTrans vars)
 iterApp fs xs = cycleApp fs (pluslen xs)
 
 anonTmpl :: Stringable a => GenParser Char (Char, Char) (([SElem], [SElem]) -> SEnv a -> a)

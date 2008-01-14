@@ -2,7 +2,7 @@
 
 --QuickCheck driver is lifted wholesale from XMonad
 
-module Properties where
+module Main where
 import Text.Printf
 import Control.Monad
 import Control.Arrow hiding (pure)

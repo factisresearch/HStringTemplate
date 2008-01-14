@@ -35,7 +35,7 @@
 -----------------------------------------------------------------------------
 
 module Text.StringTemplate
-    (StringTemplate, toString, toByteString, toShowS, toPPDoc,
+    (StringTemplate, toString, toPPDoc, render,
      newSTMP, newAngleSTMP, StringTemplateShows(..), ToSElem(..), STGen,
      setAttribute, groupStringTemplates, addSuperGroup, addSubGroup,
      mergeSTGroups, stringTemplateFileGroup, cacheSTGroup, cacheSTGroupForever,
