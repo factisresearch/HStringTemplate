@@ -1,8 +1,10 @@
 {-# OPTIONS -O2 -fbang-patterns -fglasgow-exts -fno-monomorphism-restriction #-}
+{-# OPTIONS_HADDOCK not-home #-}
 
 module Text.StringTemplate.Base
-    (StringTemplate, toString, toPPDoc, render,
-     newSTMP, newAngleSTMP, StringTemplateShows(..), ToSElem(..), STGen,
+    (StringTemplate, StringTemplateShows(..), ToSElem(..), STGen,
+     Stringable(..),
+     toString, toPPDoc, render, newSTMP, newAngleSTMP, 
      setAttribute, groupStringTemplates, addSuperGroup, addSubGroup,
      mergeSTGroups, stringTemplateFileGroup, cacheSTGroup, cacheSTGroupForever,
      optInsertGroup, optInsertTmpl, paddedTrans
@@ -25,7 +27,7 @@ import qualified Text.PrettyPrint.HughesPJ as PP
 
 import Text.StringTemplate.Classes
 --import Debug.Trace --DEBUG
-import Text.StringTemplate.Instances()
+--import Text.StringTemplate.Instances()
 
 {--------------------------------------------------------------------
   Generic Utilities
@@ -57,16 +59,21 @@ paddedTrans n as = take (maximum . map length $ as) . trans $ as
           h (x:_) = x; h _ = n; t (_:y:xs) = (y:xs); t _ = [n];
           m (x:xs) = (x:xs); m _ = [n];
 
+
 {--------------------------------------------------------------------
   StringTemplate and the API
 --------------------------------------------------------------------}
 --add noInline to unsafe methods?
---specialize stemplate by type so that sharing works.
 
--- | A Function that generates StringTemplates
+-- | A function that generates StringTemplates.
+-- | This is conceptually a query function into a \"group\" of StringTemplates.
 type STGen a = String -> (First (StringTemplate a))
 
--- | A String with \"holes\" in it.
+-- | A String with \"holes\" in it. StringTemplates may be composed of any
+-- "Stringable" type, which at the moment includes 'String's, 'ByteString's,
+-- PrettyPrinter 'Doc's, and 'Endo' 'String's, which are actually of type
+-- 'ShowS'. When a StringTemplate is composed of a type, its internals are
+-- as well, so it is, so to speak \"turtles all the way down.\" 
 data StringTemplate a = STMP {senv :: SEnv a,  runSTMP :: SEnv a -> a}
 
 -- | Renders a StringTemplate to a String.
@@ -77,12 +84,12 @@ toString = render
 toPPDoc :: StringTemplate PP.Doc -> PP.Doc
 toPPDoc = render
 
--- | Parses a String to produce a StringTemplate, with '$'s as delimiters.
+-- | Parses a String to produce a StringTemplate, with \'$\'s as delimiters.
 -- It is constructed with a stub group that cannot look up other templates.
 newSTMP :: Stringable a => String -> StringTemplate a
 newSTMP = STMP (SEnv M.empty [] mempty) . parseSTMP ('$','$')
 
--- | Parses a String to produce a StringTemplate, delimited by '<' and '>'.
+-- | Parses a String to produce a StringTemplate, delimited by \'<\' and \'>\'.
 -- It is constructed with a stub group that cannot look up other templates.
 newAngleSTMP :: Stringable a => String -> StringTemplate a
 newAngleSTMP = STMP (SEnv M.empty [] mempty) . parseSTMP ('$','$')
@@ -119,8 +126,8 @@ optInsertTmpl x st = st {senv = optInsert (map (second justSTR) x) (senv st)}
 addSuperGroup :: STGen a -> STGen a -> STGen a
 addSuperGroup f g = sgInsert g <$$> f
 
--- | Adds a "subgroup" to any StringTemplate group such that templates from
--- the original group now have template calls "shadowed" by the subgroup.
+-- | Adds a \"subgroup\" to any StringTemplate group such that templates from
+-- the original group now have template calls \"shadowed\" by the subgroup.
 addSubGroup :: STGen a -> STGen a -> STGen a
 addSubGroup f g = sgOverride g <$$> f
 
@@ -130,7 +137,7 @@ mergeSTGroups :: STGen a -> STGen a -> STGen a
 mergeSTGroups f g = addSuperGroup f g `mappend` addSubGroup g f
 
 -- | Given an integral amount of seconds and a group, returns a group cached for
--- that span of time. Does not cache "misses."
+-- that span of time. Does not cache \"misses.\"
 cacheSTGroup :: Int -> STGen a -> STGen a
 cacheSTGroup m g = unsafePerformIO $ go <$> newIORef M.empty
     where go r s = unsafePerformIO $ do
@@ -143,14 +150,14 @@ cacheSTGroup m g = unsafePerformIO $ go <$> newIORef M.empty
                          else return st)
                       . M.lookup s $ mp
               where udReturn now = maybe (return found)
-                                   (\st -> do
+                                   (const $ do
                                       atomicModifyIORef r $
                                          flip (,) () . M.insert s (now, found)
                                       return found)
                                      . getFirst $ found
                         where found = g s
 
--- | Returns a group cached forever. Caches "misses" as well as hits.
+-- | Returns a group cached forever. Caches \"misses\" as well as hits.
 cacheSTGroupForever :: STGen a -> STGen a
 cacheSTGroupForever g = unsafePerformIO $ go <$> newIORef M.empty
     where go r s = unsafePerformIO $ do
@@ -198,10 +205,10 @@ parseSTMP x = either (showStr .  show) (id) . runParser (stmpl False) x ""
 
 showVal :: Stringable a => SEnv a -> SElem -> a
 showVal snv se =
-    case se of (STR x)-> stFromString x;
-               (LI xs)-> joinUp xs;
-               (SM sm)-> joinUp $ M.elems sm
-               (STSH x)-> stFromString (format x);
+    case se of (STR x) -> stFromString x
+               (LI xs) -> joinUp xs
+               (SM sm) -> joinUp $ M.elems sm
+               (STSH x) -> stFromString (format x)
                SNull -> showVal <*> nullOpt $ snv 
     where sepVal = fromMaybe (justSTR "") =<< optLookup "seperator" $ snv
           format = maybe stshow . stfshow <*> optLookup "format" $ snv
@@ -209,14 +216,6 @@ showVal snv se =
 
 showStr :: Stringable a => String -> SEnv a -> a
 showStr = flip showVal . STR
-
-class Monoid a => Stringable a where
-    stFromString :: String -> a
-    stToString :: a -> String
-    mconcatMap :: [b] -> (b -> a) -> a
-    mconcatMap m k = foldr (mappend . k) mempty m
-    mintercalate :: a -> [a] -> a
-    mintercalate = mconcat `o` intersperse
 
 instance Stringable String where
     stFromString = id

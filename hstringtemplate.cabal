@@ -20,4 +20,7 @@ library
   else
     build-depends:     base < 3, filepath, parsec
   exposed-modules:   Text.StringTemplate
-  ghc-options:       -Wall -fglasgow-exts -O2
+                     Text.StringTemplate.Base
+                     Text.StringTemplate.Classes
+                     Text.StringTemplate.Instances
+  ghc-options:       -W -cpp -fglasgow-exts -O2

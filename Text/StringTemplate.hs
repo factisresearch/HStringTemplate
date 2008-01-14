@@ -6,7 +6,6 @@
 -- Maintainer  :  s.clover@gmail.com
 -- Stability   :  experimental
 -- Portability :  portable
--- Version     :  0.1
 --
 -- A StringTemplate is a String with \"holes\" in it.
 -- This is a port of the Java StringTemplate library written by Terrence Parr.
@@ -34,12 +33,20 @@
 -- define a stringTemplateFormattedShows method that parses a format string.
 -----------------------------------------------------------------------------
 
-module Text.StringTemplate
-    (StringTemplate, toString, toPPDoc, render,
-     newSTMP, newAngleSTMP, StringTemplateShows(..), ToSElem(..), STGen,
-     setAttribute, groupStringTemplates, addSuperGroup, addSubGroup,
-     mergeSTGroups, stringTemplateFileGroup, cacheSTGroup, cacheSTGroupForever,
-     optInsertGroup, optInsertTmpl
-    ) where
-    import Text.StringTemplate.Base
-    import Text.StringTemplate.Instances
+module Text.StringTemplate (
+  -- * Types
+  StringTemplate, STGen,
+  -- * Classes
+  StringTemplateShows(..), ToSElem(..), Stringable(..),
+  -- * Creation
+  newSTMP, newAngleSTMP, stringTemplateFileGroup,
+  -- * Display
+  toString, toPPDoc, render, 
+  -- * Modification
+  setAttribute, optInsertGroup, optInsertTmpl,
+  -- * Groups
+  groupStringTemplates, addSuperGroup, addSubGroup,
+  mergeSTGroups, cacheSTGroup, cacheSTGroupForever
+  ) where
+import Text.StringTemplate.Base
+import Text.StringTemplate.Instances()
