@@ -13,7 +13,7 @@
 --
 -- This library implements the basic 3.0 grammar, lacking group files
 -- (though not groups themselves), Regions, and Interfaces.
--- The goal is not to blindly copy the StringTemplate API, but rather to 
+-- The goal is not to blindly copy the StringTemplate API, but rather to
 -- take its central ideas and implement them in a Haskellish manner.
 -- Indentation and wrapping, for example, are implemented through the
 -- HughesPJ Pretty Printing library. Calling toPPDoc on a StringTemplate
@@ -41,7 +41,7 @@ module Text.StringTemplate (
   -- * Creation
   newSTMP, newAngleSTMP, stringTemplateFileGroup,
   -- * Display
-  toString, toPPDoc, render, 
+  toString, toPPDoc, render,
   -- * Modification
   setAttribute, optInsertGroup, optInsertTmpl,
   -- * Groups

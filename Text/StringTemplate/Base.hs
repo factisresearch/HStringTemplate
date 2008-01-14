@@ -4,7 +4,7 @@
 module Text.StringTemplate.Base
     (StringTemplate, StringTemplateShows(..), ToSElem(..), STGen,
      Stringable(..),
-     toString, toPPDoc, render, newSTMP, newAngleSTMP, 
+     toString, toPPDoc, render, newSTMP, newAngleSTMP,
      setAttribute, groupStringTemplates, addSuperGroup, addSubGroup,
      mergeSTGroups, stringTemplateFileGroup, cacheSTGroup, cacheSTGroupForever,
      optInsertGroup, optInsertTmpl, paddedTrans
@@ -13,7 +13,7 @@ import Control.Monad
 import Control.Arrow hiding (pure)
 import Control.Applicative hiding ((<|>),many)
 import Data.Maybe
-import Data.Monoid
+import Data.Monoid hiding (First, getFirst)
 import Data.List
 import Text.ParserCombinators.Parsec
 import System.Time
@@ -73,7 +73,7 @@ type STGen a = String -> (First (StringTemplate a))
 -- "Stringable" type, which at the moment includes 'String's, 'ByteString's,
 -- PrettyPrinter 'Doc's, and 'Endo' 'String's, which are actually of type
 -- 'ShowS'. When a StringTemplate is composed of a type, its internals are
--- as well, so it is, so to speak \"turtles all the way down.\" 
+-- as well, so it is, so to speak \"turtles all the way down.\"
 data StringTemplate a = STMP {senv :: SEnv a,  runSTMP :: SEnv a -> a}
 
 -- | Renders a StringTemplate to a String.
@@ -209,7 +209,7 @@ showVal snv se =
                (LI xs) -> joinUp xs
                (SM sm) -> joinUp $ M.elems sm
                (STSH x) -> stFromString (format x)
-               SNull -> showVal <*> nullOpt $ snv 
+               SNull -> showVal <*> nullOpt $ snv
     where sepVal = fromMaybe (justSTR "") =<< optLookup "seperator" $ snv
           format = maybe stshow . stfshow <*> optLookup "format" $ snv
           joinUp = mintercalate (showVal snv sepVal) . map (showVal snv)
@@ -226,7 +226,7 @@ instance Stringable PP.Doc where
     stToString = PP.render
     mconcatMap m k = PP.fcat . map k $ m
     mintercalate = PP.fcat `o` PP.punctuate
-   
+
 instance Monoid PP.Doc where
     mempty = PP.empty
     x `mappend` y = x PP.<> y
@@ -236,7 +236,7 @@ instance Stringable B.ByteString where
     stToString = B.unpack
 
 instance Stringable (Endo String) where
-    stFromString = Endo . (++) 
+    stFromString = Endo . (++)
     stToString = ($ []) . appEndo
 
 {--------------------------------------------------------------------
@@ -271,7 +271,7 @@ escapedStr chs = concat <$> many1 (escapedChar chs)
 stmpl :: Stringable a => Bool -> GenParser Char (Char,Char) (SEnv a -> a)
 stmpl p = do
   (ca, cb) <- getState
-  mconcat <$> many (showStr <$> escapedStr [ca] <|> try (around ca optExpr cb) 
+  mconcat <$> many (showStr <$> escapedStr [ca] <|> try (around ca optExpr cb)
                     <|> try comment <|> bl <?> "template")
       where bl | p = try blank | otherwise = blank
 
@@ -283,7 +283,7 @@ subStmp = do
                          <|> try (around ca optExpr cb)
                          <|> try comment <|> blank  <?> "subtemplate")
   return (st `o` udEnv)
-      where transform an (att,i:i0:[]) = 
+      where transform an (att,i:i0:[]) =
                 flip (foldr envInsert) $ zip ("i":"i0":an) (i:i0:att)
             attribNames = (char '|' >>) . return =<< comlist (spaced word)
 
@@ -325,7 +325,7 @@ getProp _ se = const se
 ifIsSet t e n SNull = if n then e else t
 ifIsSet t e n _ = if n then t else e
 
-parseif cb = (,,,,,) <$> option True (char '!' >> return False) <*> subexprn 
+parseif cb = (,,,,,) <$> option True (char '!' >> return False) <*> subexprn
              <*> props <*> char ')' .>> char cb <*> stmpl True <*>
              (try elseifstat <|> try elsestat <|> endifstat)
 
@@ -386,7 +386,7 @@ subexprn = cct <$> spaced
                            flip mconcatMap <$> showVal <*> sequence xs
           cct [x] = x
 
-braceConcat :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem) 
+braceConcat :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem)
 braceConcat = LI . foldr go [] `o` sequence <$> around '['(comlist subexprn)']'
     where go (LI x) lst = x++lst; go x lst = x:lst
 
@@ -453,7 +453,7 @@ regTemplate = do
   name <- justSTR <$> word <|> around '(' subexprn ')'
   vals <- around '(' (spaced $ try assgn <|> anonassgn <|> return []) ')'
   return $ join . (. name) . makeTmpl vals
-      where makeTmpl v ((se:_),is) (STR x)  = 
+      where makeTmpl v ((se:_),is) (STR x)  =
                 render |. stBind . (zip ["it","i","i0"] (se:is) ++)
                            . swing (map . second) v <*> stLookup x
             makeTmpl _ _ _ = showStr "Invalid Template Specified"

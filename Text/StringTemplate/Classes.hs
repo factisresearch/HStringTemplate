@@ -6,15 +6,15 @@ module Text.StringTemplate.Classes
     ) where
 import qualified Data.Map as M
 import Data.List
-import Data.Monoid
+import Data.Monoid hiding (First, getFirst)
 
 #if __GLASGOW_HASKELL__ <= 680
 newtype First a = First { getFirst :: Maybe a }
-	deriving (Eq, Ord, Read, Show)
+        deriving (Eq, Ord, Read, Show)
 instance Monoid (First a) where
-	mempty = First Nothing
-	r@(First (Just _)) `mappend` _ = r
-	First Nothing `mappend` r = r
+        mempty = First Nothing
+        r@(First (Just _)) `mappend` _ = r
+        First Nothing `mappend` r = r
 #endif
 
 instance Functor First where
@@ -41,7 +41,7 @@ class (Eq a, Show a, Ord a) => StringTemplateShows a where
     stringTemplateFormattedShow :: String -> a -> String
     stringTemplateFormattedShow = flip $ const . stringTemplateShow
 
-data STShow = forall a.(StringTemplateShows a, Show a, Eq a, Ord a) => STShow a 
+data STShow = forall a.(StringTemplateShows a, Show a, Eq a, Ord a) => STShow a
 
 instance Eq STShow where
     (STShow a) == (STShow b) = show a == show b

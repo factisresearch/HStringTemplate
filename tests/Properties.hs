@@ -20,6 +20,7 @@ import Text.StringTemplate.Base
 import Test.QuickCheck hiding (promote)
 import System.Environment
 
+main :: IO ()
 main = do
     args <- getArgs
     let n = if null args then 100 else read (head args)
@@ -45,7 +46,7 @@ prop_paddedTrans (x::[Int]) (y::[Int]) (z::[Int]) n =
    (length pt == length npt) &&
    all (3 ==) (map length pt) &&
    all (all (==n)) (zipWith unmerge (paddedTrans n pt) [x,y,z])
-          where pt   = paddedTrans n [x,y,z] 
+          where pt   = paddedTrans n [x,y,z]
                 npt  = transpose [x,y,z]
                 unmerge xl@(x:xs) (y:ys)
                     | x == y = unmerge xs ys
@@ -82,12 +83,12 @@ prop_seperator (LitString x) (LitString y) (LitString z) i =
 newtype LitChar = LitChar {unLitChar :: Char} deriving Show
 instance Arbitrary LitChar where
   arbitrary = LitChar <$> choose ('a','z')
+  coarbitrary = undefined
 
 newtype LitString = LitString String deriving Show
 instance Arbitrary LitString where
-    arbitrary =
-        LitString . map unLitChar <$> sized (\n -> choose (0,n) >>= vector)
-
+  arbitrary = LitString . map unLitChar <$> sized (\n -> choose (0,n) >>= vector)
+  coarbitrary = undefined
 {--------------------------------------------------------------------
   QuickCheck Driver: This lovely code borrowed wholesale from XMonad.
 --------------------------------------------------------------------}
