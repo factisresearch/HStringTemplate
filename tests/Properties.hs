@@ -1,6 +1,4 @@
-{-# OPTIONS -O2 -fbang-patterns -fglasgow-exts -optc-O3 #-}
-
---QuickCheck driver is lifted wholesale from XMonad
+{-# OPTIONS -O2 -fglasgow-exts #-}
 
 module Main where
 import Text.Printf

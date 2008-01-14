@@ -4,7 +4,7 @@
 module Text.StringTemplate.Base
     (StringTemplate, StringTemplateShows(..), ToSElem(..), STGen,
      Stringable(..),
-     toString, toPPDoc, render, newSTMP, newAngleSTMP,
+     toString, toPPDoc, render, newSTMP, newAngleSTMP, getStringTemplate,
      setAttribute, groupStringTemplates, addSuperGroup, addSubGroup,
      mergeSTGroups, stringTemplateFileGroup, cacheSTGroup, cacheSTGroupForever,
      optInsertGroup, optInsertTmpl, paddedTrans
@@ -50,7 +50,7 @@ infixr 5 .>>
 (<$$>) :: (Functor f1, Functor f) => (a -> b) -> f (f1 a) -> f (f1 b)
 (<$$>) x y = ((<$>) . (<$>)) x y
 
-fromMany :: t -> ([t1] -> t) -> [t1] -> t
+fromMany :: b -> ([a] -> b) -> [a] -> b
 fromMany e _ [] = e
 fromMany _ f xs  = f xs
 
@@ -105,6 +105,11 @@ newAngleSTMP = STMP (SEnv M.empty [] mempty) . parseSTMP ('$','$')
 -- If the attribute already exists, it is appended to a list.
 setAttribute :: (ToSElem a) => String -> a -> StringTemplate b -> StringTemplate b
 setAttribute s x st = st {senv = envInsApp s (toSElem x) (senv st)}
+
+-- | Queries an SGen and returns Just the appropriate StringTemplate if it exists,
+-- otherwise, Nothing.
+getStringTemplate :: (Stringable a) => [Char] -> STGen a -> Maybe (StringTemplate a)
+getStringTemplate s sg = stGetFirst (sg s)
 
 -- | Given a list of named of StringTemplates, returns a group which generates
 -- them such that they can call one another.
@@ -339,7 +344,7 @@ optExpr = do
   Statements
 --------------------------------------------------------------------}
 
-getProp :: (Stringable a) => [SEnv a -> SElem] -> SElem -> SEnv a -> SElem
+getProp :: Stringable a => [SEnv a -> SElem] -> SElem -> SEnv a -> SElem
 getProp (p:ps) (SM mp) = maybe SNull . flip (getProp ps) <*>
                           flip M.lookup mp . ap (stToString `o` showVal) p
 getProp (_:_) _ = const SNull
@@ -349,9 +354,7 @@ ifIsSet :: t -> t -> Bool -> SElem -> t
 ifIsSet t e n SNull = if n then e else t
 ifIsSet t e n _ = if n then t else e
 
-parseif :: (Stringable a3, Stringable a2, Stringable a1, Stringable a) => Char -> GenParser Char (Char, Char) (Bool, SEnv a -> SElem, [SEnv a1 -> SElem], Char,
-                                              SEnv a2 -> a2,
-                                              SEnv a3 -> a3)
+parseif :: Stringable a => Char -> GenParser Char (Char, Char) (Bool, SEnv a -> SElem, [SEnv a -> SElem], Char, SEnv a -> a, SEnv a -> a)
 parseif cb = (,,,,,) <$> option True (char '!' >> return False) <*> subexprn
              <*> props <*> char ')' .>> char cb <*> stmpl True <*>
              (try elseifstat <|> try elsestat <|> endifstat)
@@ -451,7 +454,7 @@ functn = do
 --------------------------------------------------------------------}
 --change makeTmpl to do notation for clarity?
 
-mkIndex :: (Num b) => [b] -> [[SElem]]
+mkIndex :: Num b => [b] -> [[SElem]]
 mkIndex = map ((:) . STR . show . (1+) <*> (:[]) . STR . show)
 ix0 :: [SElem]
 ix0 = [STR "1",STR "0"]
@@ -467,7 +470,7 @@ liTrans = pluslen' . paddedTrans SNull . map u
     where u (LI x) = x; u x = [x]
           pluslen' xss@(x:_) = zip xss $ mkIndex [0..(length x)]
 
-iterApp :: (Stringable a) => [([SElem], [SElem]) -> SEnv a -> a] -> [SElem] -> SEnv a -> a
+iterApp :: Stringable a => [([SElem], [SElem]) -> SEnv a -> a] -> [SElem] -> SEnv a -> a
 iterApp [f] (LI xs:[]) = (mconcatMap $ pluslen xs) . flip f
 iterApp [f] vars@(LI _:_) = (mconcatMap $ liTrans vars) . flip f
 iterApp [f] v = f (v,ix0)

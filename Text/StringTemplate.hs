@@ -45,6 +45,7 @@ module Text.StringTemplate (
   -- * Modification
   setAttribute, optInsertGroup, optInsertTmpl,
   -- * Groups
+  getStringTemplate,
   groupStringTemplates, addSuperGroup, addSubGroup,
   mergeSTGroups, cacheSTGroup, cacheSTGroupForever
   ) where

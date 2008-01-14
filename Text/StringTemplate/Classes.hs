@@ -8,14 +8,12 @@ import qualified Data.Map as M
 import Data.List
 import Data.Monoid
 
-
 newtype StFirst a = StFirst { stGetFirst :: Maybe a }
         deriving (Eq, Ord, Read, Show)
 instance Monoid (StFirst a) where
         mempty = StFirst Nothing
         r@(StFirst (Just _)) `mappend` _ = r
         StFirst Nothing `mappend` r = r
-
 
 instance Functor StFirst where
     fmap f x = StFirst . fmap f . stGetFirst $ x
@@ -32,7 +30,7 @@ class ToSElem a where
     toSElem :: a -> SElem
 
 -- | The StringTemplateShows class should be instantiated for all types that are
--- directly displayed in a StringTemplate. It's methods all have defaults.
+-- directly displayed in a StringTemplate. Its methods all have defaults.
 class (Eq a, Show a, Ord a) => StringTemplateShows a where
     -- | Defaults to 'show'.
     stringTemplateShow :: a -> String
