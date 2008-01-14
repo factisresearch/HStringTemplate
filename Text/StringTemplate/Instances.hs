@@ -1,4 +1,4 @@
-{-# OPTIONS -O2 -fbang-patterns -fglasgow-exts -fallow-overlapping-instances -fallow-undecidable-instances -optc-O3 #-}
+{-# OPTIONS -fbang-patterns -fglasgow-exts -fallow-overlapping-instances -fallow-undecidable-instances #-}
 {-# OPTIONS_HADDOCK not-home #-}
 
 module Text.StringTemplate.Instances where
@@ -24,10 +24,10 @@ instance ToSElem Bool where
     toSElem _ = SNull
 
 instance (ToSElem a) => ToSElem [a] where
-    toSElem = LI . map toSElem 
+    toSElem = LI . map toSElem
 
 instance (ToSElem a) => ToSElem (M.Map String a) where
-    toSElem = SM . fmap toSElem 
+    toSElem = SM . fmap toSElem
 
 instance (StringTemplateShows a) => ToSElem a where
     toSElem = STSH . STShow

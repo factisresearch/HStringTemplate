@@ -23,5 +23,5 @@ library
                      Text.StringTemplate.Base
                      Text.StringTemplate.Classes
                      Text.StringTemplate.Instances
-  ghc-options:       -Wall -fglasgow-exts -O2
+  ghc-options:       -Wall -O2  -optc-O3
   extensions:        CPP
