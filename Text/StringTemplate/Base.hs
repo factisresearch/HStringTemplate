@@ -5,7 +5,8 @@ module Text.StringTemplate.Base
     (StringTemplate, StringTemplateShows(..), ToSElem(..), STGen,
      Stringable(..),
      toString, toPPDoc, render, newSTMP, newAngleSTMP, getStringTemplate,
-     setAttribute, groupStringTemplates, addSuperGroup, addSubGroup,
+     setAttribute, setManyAttrib,
+     groupStringTemplates, addSuperGroup, addSubGroup,
      mergeSTGroups, stringTemplateFileGroup, cacheSTGroup, cacheSTGroupForever,
      optInsertGroup, optInsertTmpl, paddedTrans
     ) where
@@ -106,9 +107,14 @@ newAngleSTMP = STMP (SEnv M.empty [] mempty) . parseSTMP ('$','$')
 setAttribute :: (ToSElem a) => String -> a -> StringTemplate b -> StringTemplate b
 setAttribute s x st = st {senv = envInsApp s (toSElem x) (senv st)}
 
+-- | Yields a StringTemplate with the appropriate attributes set.
+-- If any attribute already exists, it is appended to a list.
+setManyAttrib :: (ToSElem a) => [(String, a)] -> StringTemplate b -> StringTemplate b
+setManyAttrib = flip . foldl' . flip $ uncurry setAttribute
+
 -- | Queries an SGen and returns Just the appropriate StringTemplate if it exists,
 -- otherwise, Nothing.
-getStringTemplate :: (Stringable a) => [Char] -> STGen a -> Maybe (StringTemplate a)
+getStringTemplate :: (Stringable a) => String -> STGen a -> Maybe (StringTemplate a)
 getStringTemplate s sg = stGetFirst (sg s)
 
 -- | Given a list of named of StringTemplates, returns a group which generates

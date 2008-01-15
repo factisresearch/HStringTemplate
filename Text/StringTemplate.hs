@@ -43,7 +43,7 @@ module Text.StringTemplate (
   -- * Display
   toString, toPPDoc, render,
   -- * Modification
-  setAttribute, optInsertGroup, optInsertTmpl,
+  setAttribute, setManyAttrib, optInsertGroup, optInsertTmpl,
   -- * Groups
   getStringTemplate,
   groupStringTemplates, addSuperGroup, addSubGroup,
