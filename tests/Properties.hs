@@ -80,8 +80,9 @@ prop_seperator (LitString x) (LitString y) (LitString z) i =
     where tmpl = "$"++x++";seperator='"++z++"'$"
 
 prop_simpleGroup (LitString x) (LitString y) (LitString z) (LitString t) =
-    length x > 0 && length y > 0 && length z > 0 && length t > 0 ==>
-               x == (toString . fromJust . getStringTemplate x $ grp)
+    length x > 0 && length y > 0 && length z > 0 && length t > 0 
+               && length (nub [x,y,z,t]) == 4 ==>
+                  x == (toString . fromJust . getStringTemplate x $ grp)
     where tm   = newSTMP x
           tm'  = newSTMP $ "$"++y++"()$"
           tmIt = newSTMP "$it$"
