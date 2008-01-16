@@ -1,6 +1,6 @@
 {-# OPTIONS -O2 -fglasgow-exts #-}
 
-module Main where
+module Properties where
 import Text.Printf
 import Control.Monad
 import Control.Arrow hiding (pure)
@@ -33,7 +33,8 @@ main = do
          ("prop_emptyNulls" , mytest prop_emptyNulls),
          ("prop_fullNulls" , mytest prop_fullNulls),
          ("prop_substitution" , mytest prop_substitution),
-         ("prop_seperator" , mytest prop_seperator)
+         ("prop_seperator" , mytest prop_seperator),
+         ("prop_simpleGroup" , mytest prop_simpleGroup)
         ]
 
 {-----------------------------------------------------------------------
@@ -77,6 +78,15 @@ prop_seperator (LitString x) (LitString y) (LitString z) i =
                (toString . setAttribute x (replicate (abs i) y)
                 . newSTMP $ tmpl)
     where tmpl = "$"++x++";seperator='"++z++"'$"
+
+prop_simpleGroup (LitString x) (LitString y) (LitString z) (LitString t) =
+    length x > 0 && length y > 0 && length z > 0 && length t > 0 ==>
+               x == (toString . fromJust . getStringTemplate x $ grp)
+    where tm   = newSTMP x
+          tm'  = newSTMP $ "$"++y++"()$"
+          tmIt = newSTMP "$it$"
+          tm'' = newSTMP $ "$"++z++"():"++t++"()$"
+          grp = groupStringTemplates [(y,tm),(z,tm'),(t,tmIt),(x,tm'')]
 
 newtype LitChar = LitChar {unLitChar :: Char} deriving Show
 instance Arbitrary LitChar where
