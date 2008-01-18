@@ -23,4 +23,4 @@ library
                      Text.StringTemplate.Base
                      Text.StringTemplate.Classes
                      Text.StringTemplate.Instances
-  ghc-options:       -Wall -O2 -optc-O3
+  ghc-options:       -Wall

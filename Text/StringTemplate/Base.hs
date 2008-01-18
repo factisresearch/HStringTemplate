@@ -383,6 +383,7 @@ exprn = do
 seqTmpls :: Stringable a => [[SElem a] -> SEnv a -> a] -> [SElem a] -> SEnv a -> a
 seqTmpls [f]    y = f y
 seqTmpls (f:fs) y = seqTmpls fs =<< (:[]) . SBLE . f y
+seqTmpls  _ _     = const (stFromString "")
 
 subexprn :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem a)
 subexprn = cct <$> spaced
@@ -395,6 +396,7 @@ subexprn = cct <$> spaced
     where cct xs@(_:_:_) = SBLE |.
                            flip mconcatMap <$> showVal <*> sequence xs
           cct [x] = x
+          cct  _  = const SNull
 
 braceConcat :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem a)
 braceConcat = LI . foldr go [] `o` sequence <$> around '['(comlist subexprn)']'
