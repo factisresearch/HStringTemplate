@@ -237,7 +237,7 @@ showVal snv se =
                (SM sm) -> joinUp $ M.elems sm
                (STSH x) -> stFromString (format x)
                SNull -> showVal <*> nullOpt $ snv
-    where sepVal = fromMaybe (justSTR "") =<< optLookup "seperator" $ snv
+    where sepVal = fromMaybe (justSTR "") =<< optLookup "separator" $ snv
           format = maybe stshow . stfshow <*> optLookup "format" $ snv
           joinUp = mintercalate (showVal snv sepVal) . map (showVal snv)
 

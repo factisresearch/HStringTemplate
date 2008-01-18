@@ -33,7 +33,7 @@ main = do
          ("prop_emptyNulls" , mytest prop_emptyNulls),
          ("prop_fullNulls" , mytest prop_fullNulls),
          ("prop_substitution" , mytest prop_substitution),
-         ("prop_seperator" , mytest prop_seperator),
+         ("prop_separator" , mytest prop_separator),
          ("prop_simpleGroup" , mytest prop_simpleGroup)
         ]
 
@@ -72,12 +72,12 @@ prop_substitution (LitString x) (LitString y) (LitString z) i =
                 newSTMP . concat . replicate (abs i) $ tmpl)
     where tmpl = x++"$"++y++"$"
 
-prop_seperator (LitString x) (LitString y) (LitString z) i =
+prop_separator (LitString x) (LitString y) (LitString z) i =
     length x > 0 ==>
                (concat . intersperse z . replicate (abs i) $ y) ==
                (toString . setAttribute x (replicate (abs i) y)
                 . newSTMP $ tmpl)
-    where tmpl = "$"++x++";seperator='"++z++"'$"
+    where tmpl = "$"++x++";separator='"++z++"'$"
 
 prop_simpleGroup (LitString x) (LitString y) (LitString z) (LitString t) =
     length x > 0 && length y > 0 && length z > 0 && length t > 0 
