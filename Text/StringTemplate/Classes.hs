@@ -7,6 +7,8 @@ module Text.StringTemplate.Classes
 import qualified Data.Map as M
 import Data.List
 import Data.Monoid
+import qualified Data.ByteString.Char8 as B
+import qualified Text.PrettyPrint.HughesPJ as PP
 
 newtype StFirst a = StFirst { stGetFirst :: Maybe a }
         deriving (Eq, Ord, Read, Show)
@@ -18,20 +20,20 @@ instance Monoid (StFirst a) where
 instance Functor StFirst where
     fmap f x = StFirst . fmap f . stGetFirst $ x
 
-type SMap = M.Map String SElem
+type SMap a = M.Map String (SElem a)
 
-data SElem = STR String | STSH STShow | SM SMap | LI [SElem] | SNull deriving (Eq, Ord, Show)
+data SElem a = STR String | STSH STShow | SM (SMap a) | LI [SElem a] | SBLE a | SNull
 
 -- | The ToSElem class should be instantiated for all types that can be
 -- inserted as attributes into a StringTemplate. Generally new instances
 -- should not be defined for atomic types (use 'StringTemplateShows' for that)
 -- but rather for containers, most easily by reducing them to maps or lists.
 class ToSElem a where
-    toSElem :: a -> SElem
+    toSElem :: Stringable b => a -> SElem b
 
 -- | The StringTemplateShows class should be instantiated for all types that are
 -- directly displayed in a StringTemplate. Its methods all have defaults.
-class (Eq a, Show a, Ord a) => StringTemplateShows a where
+class (Show a) => StringTemplateShows a where
     -- | Defaults to 'show'.
     stringTemplateShow :: a -> String
     stringTemplateShow = show
@@ -39,16 +41,7 @@ class (Eq a, Show a, Ord a) => StringTemplateShows a where
     stringTemplateFormattedShow :: String -> a -> String
     stringTemplateFormattedShow = flip $ const . stringTemplateShow
 
-data STShow = forall a.(StringTemplateShows a, Show a, Eq a, Ord a) => STShow a
-
-instance Eq STShow where
-    (STShow a) == (STShow b) = show a == show b
-
-instance Ord STShow where
-    (STShow a) >= (STShow b) = show a >= show b
-
-instance Show STShow where
-    show (STShow a) = "STShow "++show a
+data STShow = forall a.(StringTemplateShows a) => STShow a
 
 -- | The Stringable class should be instantiated with care.
 -- Generally, the provided instances should be enough for anything.
@@ -61,3 +54,25 @@ class Monoid a => Stringable a where
     -- | Defaults to  @ (mconcat .) . intersperse @
     mintercalate :: a -> [a] -> a
     mintercalate = (mconcat .) . intersperse
+
+instance Stringable String where
+    stFromString = id
+    stToString = id
+
+instance Stringable PP.Doc where
+    stFromString = PP.text
+    stToString = PP.render
+    mconcatMap m k = PP.fcat . map k $ m
+    mintercalate = (PP.fcat .) . PP.punctuate
+
+instance Monoid PP.Doc where
+    mempty = PP.empty
+    x `mappend` y = x PP.<> y
+
+instance Stringable B.ByteString where
+    stFromString = B.pack
+    stToString = B.unpack
+
+instance Stringable (Endo String) where
+    stFromString = Endo . (++)
+    stToString = ($ []) . appEndo

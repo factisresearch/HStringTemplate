@@ -23,7 +23,6 @@ import System.FilePath
 import Data.IORef
 import System.IO.Unsafe
 import qualified Data.Map as M
-import qualified Data.ByteString.Char8 as B
 import qualified Text.PrettyPrint.HughesPJ as PP
 
 import Text.StringTemplate.Classes
@@ -92,6 +91,10 @@ toString = render
 toPPDoc :: StringTemplate PP.Doc -> PP.Doc
 toPPDoc = render
 
+-- | Generic render function for a StringTemplate of any type.
+render :: Stringable a => StringTemplate a -> a
+render = runSTMP <*> senv
+
 -- | Parses a String to produce a StringTemplate, with \'$\'s as delimiters.
 -- It is constructed with a stub group that cannot look up other templates.
 newSTMP :: Stringable a => String -> StringTemplate a
@@ -104,12 +107,12 @@ newAngleSTMP = STMP (SEnv M.empty [] mempty) . parseSTMP ('$','$')
 
 -- | Yields a StringTemplate with the appropriate attribute set.
 -- If the attribute already exists, it is appended to a list.
-setAttribute :: (ToSElem a) => String -> a -> StringTemplate b -> StringTemplate b
+setAttribute :: (ToSElem a, Stringable b) => String -> a -> StringTemplate b -> StringTemplate b
 setAttribute s x st = st {senv = envInsApp s (toSElem x) (senv st)}
 
 -- | Yields a StringTemplate with the appropriate attributes set.
 -- If any attribute already exists, it is appended to a list.
-setManyAttrib :: (ToSElem a) => [(String, a)] -> StringTemplate b -> StringTemplate b
+setManyAttrib :: (ToSElem a, Stringable b) => [(String, a)] -> StringTemplate b -> StringTemplate b
 setManyAttrib = flip . foldl' . flip $ uncurry setAttribute
 
 -- | Queries an SGen and returns Just the appropriate StringTemplate if it exists,
@@ -193,25 +196,22 @@ cacheSTGroupForever g = unsafePerformIO $ go <$> newIORef M.empty
 --------------------------------------------------------------------}
 --IMPLEMENT groups having stLookup return a Maybe for regions
 
-data SEnv a = SEnv {smp :: SMap, sopts :: [(String, (SEnv a-> SElem))], sgen :: STGen a}
+data SEnv a = SEnv {smp :: SMap a, sopts :: [(String, (SEnv a -> SElem a))], sgen :: STGen a}
 
-render :: Stringable a => StringTemplate a -> a
-render = runSTMP <*> senv
-
-envLookup :: (Monad m) => String -> SEnv a -> m SElem
+envLookup :: (Monad m) => String -> SEnv a -> m (SElem a)
 envLookup x = M.lookup x . smp
-envInsert :: (String, SElem) -> SEnv a -> SEnv a
+envInsert :: (String, SElem a) -> SEnv a -> SEnv a
 envInsert (s, x) y = y {smp = M.insert s x (smp y)}
-envInsApp :: String -> SElem -> SEnv a -> SEnv a
+envInsApp :: Stringable a => String -> SElem a -> SEnv a -> SEnv a
 envInsApp  s  x  y = y {smp = M.insertWith go s x (smp y)}
     where go a (LI bs) = LI (a:bs)
           go a b = LI [a,b]
 
-optLookup :: String -> SEnv a -> Maybe (SEnv a -> SElem)
+optLookup :: String -> SEnv a -> Maybe (SEnv a -> SElem a)
 optLookup x = lookup x . sopts
-optInsert :: [(String, SEnv a -> SElem)] -> SEnv a -> SEnv a
+optInsert :: [(String, SEnv a -> SElem a)] -> SEnv a -> SEnv a
 optInsert x env = env {sopts = x ++ sopts env}
-nullOpt :: SEnv a -> SElem
+nullOpt :: SEnv a -> SElem a
 nullOpt = fromMaybe (justSTR "") =<< optLookup "null"
 
 stLookup :: (Stringable a) => [Char] -> SEnv a -> StringTemplate a
@@ -230,12 +230,13 @@ parseSTMP x = either (showStr .  show) (id) . runParser (stmpl False) x ""
   Internal API for polymorphic display of elements
 --------------------------------------------------------------------}
 
-showVal :: Stringable a => SEnv a -> SElem -> a
+showVal :: Stringable a => SEnv a -> SElem a -> a
 showVal snv se =
     case se of (STR x) -> stFromString x
                (LI xs) -> joinUp xs
                (SM sm) -> joinUp $ M.elems sm
                (STSH x) -> stFromString (format x)
+               (SBLE x) -> x
                SNull -> showVal <*> nullOpt $ snv
     where sepVal = fromMaybe (justSTR "") =<< optLookup "separator" $ snv
           format = maybe stshow . stfshow <*> optLookup "format" $ snv
@@ -244,37 +245,15 @@ showVal snv se =
 showStr :: Stringable a => String -> SEnv a -> a
 showStr = flip showVal . STR
 
-instance Stringable String where
-    stFromString = id
-    stToString = id
-
-instance Stringable PP.Doc where
-    stFromString = PP.text
-    stToString = PP.render
-    mconcatMap m k = PP.fcat . map k $ m
-    mintercalate = PP.fcat `o` PP.punctuate
-
-instance Monoid PP.Doc where
-    mempty = PP.empty
-    x `mappend` y = x PP.<> y
-
-instance Stringable B.ByteString where
-    stFromString = B.pack
-    stToString = B.unpack
-
-instance Stringable (Endo String) where
-    stFromString = Endo . (++)
-    stToString = ($ []) . appEndo
-
 {--------------------------------------------------------------------
   Utility Combinators
 --------------------------------------------------------------------}
 
-justSTR :: String -> b -> SElem
+justSTR :: String -> b -> SElem a
 justSTR = const . STR
 stshow :: STShow -> String
 stshow (STShow a) = stringTemplateShow a
-stfshow :: Stringable a => SEnv a -> (SEnv a -> SElem) -> STShow -> String
+stfshow :: Stringable a => SEnv a -> (SEnv a -> SElem a) -> STShow -> String
 stfshow snv fs (STShow a) = stringTemplateFormattedShow
                             (stToString `o` showVal <*> fs $ snv) a
 
@@ -287,7 +266,7 @@ word = many1 alphaNum
 comlist :: GenParser Char st a -> GenParser Char st [a]
 comlist p = spaced (p `sepBy1` spaced (char ','))
 
-props :: Stringable a => GenParser Char (Char, Char) [SEnv a -> SElem]
+props :: Stringable a => GenParser Char (Char, Char) [SEnv a -> SElem a]
 props = many $ char '.' >> (around '(' subexprn ')' <|> justSTR <$> word)
 
 escapedChar, escapedStr :: [Char] -> GenParser Char st [Char]
@@ -309,7 +288,7 @@ stmpl p = do
                     <|> try comment <|> bl <?> "template")
       where bl | p = try blank | otherwise = blank
 
-subStmp :: Stringable a => GenParser Char (Char,Char) (([SElem], [SElem]) -> SEnv a -> a)
+subStmp :: Stringable a => GenParser Char (Char,Char) (([SElem a], [SElem a]) -> SEnv a -> a)
 subStmp = do
   (ca, cb) <- getState
   udEnv <- option (transform ["it"]) (transform <$> try attribNames)
@@ -350,17 +329,17 @@ optExpr = do
   Statements
 --------------------------------------------------------------------}
 
-getProp :: Stringable a => [SEnv a -> SElem] -> SElem -> SEnv a -> SElem
+getProp :: Stringable a => [SEnv a -> SElem a] -> SElem a -> SEnv a -> SElem a
 getProp (p:ps) (SM mp) = maybe SNull . flip (getProp ps) <*>
                           flip M.lookup mp . ap (stToString `o` showVal) p
 getProp (_:_) _ = const SNull
 getProp _ se = const se
 
-ifIsSet :: t -> t -> Bool -> SElem -> t
+ifIsSet :: t -> t -> Bool -> SElem a -> t
 ifIsSet t e n SNull = if n then e else t
 ifIsSet t e n _ = if n then t else e
 
-parseif :: Stringable a => Char -> GenParser Char (Char, Char) (Bool, SEnv a -> SElem, [SEnv a -> SElem], Char, SEnv a -> a, SEnv a -> a)
+parseif :: Stringable a => Char -> GenParser Char (Char, Char) (Bool, SEnv a -> SElem a, [SEnv a -> SElem a], Char, SEnv a -> a, SEnv a -> a)
 parseif cb = (,,,,,) <$> option True (char '!' >> return False) <*> subexprn
              <*> props <*> char ')' .>> char cb <*> stmpl True <*>
              (try elseifstat <|> try elsestat <|> endifstat)
@@ -393,11 +372,6 @@ endifstat = getState >>= char . fst >> string "endif" >> return (showStr "")
 {--------------------------------------------------------------------
   Expressions
 --------------------------------------------------------------------}
---seqTmpls is sort of messy, with the lifting and unlifting.
---subexprn needs to return an SElem but we can clean it up still.
---we need to fix this to get application to nested templates right
---with prettyprinting. only decent way to do this seems to be
---to add a new constructor to SElem holding an existential stringable
 
 exprn :: Stringable a => GenParser Char (Char,Char) (SEnv a -> a)
 exprn = do
@@ -406,32 +380,32 @@ exprn = do
   return $ fromMany (showVal <*> head exprs)
              ((sequence exprs >>=) . seqTmpls) templ
 
-seqTmpls :: Stringable a => [[SElem] -> SEnv a -> a] -> [SElem] -> SEnv a -> a
+seqTmpls :: Stringable a => [[SElem a] -> SEnv a -> a] -> [SElem a] -> SEnv a -> a
 seqTmpls [f]    y = f y
-seqTmpls (f:fs) y = seqTmpls fs =<< (:[]) . STR . stToString . f y
+seqTmpls (f:fs) y = seqTmpls fs =<< (:[]) . SBLE . f y
 
-subexprn :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem)
+subexprn :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem a)
 subexprn = cct <$> spaced
             (braceConcat
-             <|> STR . stToString `o` ($ ([SNull],ix0)) <$> try regTemplate
+             <|> SBLE `o` ($ ([SNull],ix0)) <$> try regTemplate
              <|> attrib
-             <|> STR . stToString `o` ($ ([SNull],ix0)) <$> anonTmpl
+             <|> SBLE `o` ($ ([SNull],ix0)) <$> anonTmpl
              <?> "expression")
            `sepBy1` spaced (char '+')
-    where cct xs@(_:_:_) = STR . stToString |.
+    where cct xs@(_:_:_) = SBLE |.
                            flip mconcatMap <$> showVal <*> sequence xs
           cct [x] = x
 
-braceConcat :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem)
+braceConcat :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem a)
 braceConcat = LI . foldr go [] `o` sequence <$> around '['(comlist subexprn)']'
     where go (LI x) lst = x++lst; go x lst = x:lst
 
 
-literal :: GenParser Char st (b -> SElem)
+literal :: GenParser Char st (b -> SElem a)
 literal = justSTR <$> (around '"' (concat <$> many (escapedChar "\"")) '"'
                        <|> around '\'' (concat <$> many (escapedChar "'")) '\'')
 
-attrib :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem)
+attrib :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem a)
 attrib = do
   a <- literal <|> try functn <|> prepExp <$> word <|> around '(' subexprn ')'
          <?> "attribute"
@@ -439,7 +413,7 @@ attrib = do
   return $ fromMany a ((a >>=) . getProp) proprs
       where prepExp var = fromMaybe SNull <$> envLookup var
 
-functn :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem)
+functn :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem a)
 functn = do
   f <- string "first" <|> string "rest" <|> string "strip"
        <|> try (string "length") <|> string "last"
@@ -448,35 +422,37 @@ functn = do
                 | str == "first"  = head xs
                 | str == "last"   = last xs
                 | str == "rest"   = (LI . tail) xs
-                | str == "strip"  = LI . filter (/=(LI [])) $ xs
+                | str == "strip"  = LI . filter (not . liNil) $ xs
                 | str == "length" = STR . show . length $ xs
             fApply str x
                 | str == "rest"   = (LI [])
                 | str == "length" = STR "1"
                 | otherwise       = x
+            liNil (LI x) = null x
+            liNil _ = False
 
 {--------------------------------------------------------------------
   Templates
 --------------------------------------------------------------------}
 --change makeTmpl to do notation for clarity?
 
-mkIndex :: Num b => [b] -> [[SElem]]
+mkIndex :: Num b => [b] -> [[SElem a]]
 mkIndex = map ((:) . STR . show . (1+) <*> (:[]) . STR . show)
-ix0 :: [SElem]
+ix0 :: [SElem a]
 ix0 = [STR "1",STR "0"]
 
-cycleApp :: (Stringable b) => [([SElem], [SElem]) -> SEnv a -> b] -> [([SElem], [SElem])]  -> SEnv a -> b
+cycleApp :: (Stringable a) => [([SElem a], [SElem a]) -> SEnv a -> a] -> [([SElem a], [SElem a])]  -> SEnv a -> a
 cycleApp x y = mconcatMap (zipWith ($) (cycle x) y) . flip ($)
 
-pluslen :: [a] -> [([a], [SElem])]
+pluslen :: [a] -> [([a], [SElem b])]
 pluslen xs = zip (map (:[]) xs) $ mkIndex [0..(length xs)]
 
-liTrans :: [SElem] -> [([SElem], [SElem])]
+liTrans :: [SElem a] -> [([SElem a], [SElem a])]
 liTrans = pluslen' . paddedTrans SNull . map u
     where u (LI x) = x; u x = [x]
           pluslen' xss@(x:_) = zip xss $ mkIndex [0..(length x)]
 
-iterApp :: Stringable a => [([SElem], [SElem]) -> SEnv a -> a] -> [SElem] -> SEnv a -> a
+iterApp :: Stringable a => [([SElem a], [SElem a]) -> SEnv a -> a] -> [SElem a] -> SEnv a -> a
 iterApp [f] (LI xs:[]) = (mconcatMap $ pluslen xs) . flip f
 iterApp [f] vars@(LI _:_) = (mconcatMap $ liTrans vars) . flip f
 iterApp [f] v = f (v,ix0)
@@ -484,12 +460,12 @@ iterApp fs (LI xs:[]) = cycleApp fs (pluslen xs)
 iterApp fs vars@(LI _:_) = cycleApp fs (liTrans vars)
 iterApp fs xs = cycleApp fs (pluslen xs)
 
-anonTmpl :: Stringable a => GenParser Char (Char, Char) (([SElem], [SElem]) -> SEnv a -> a)
+anonTmpl :: Stringable a => GenParser Char (Char, Char) (([SElem a], [SElem a]) -> SEnv a -> a)
 anonTmpl = around '{' subStmp '}'
 
-regTemplate :: Stringable a => GenParser Char (Char, Char) (([SElem], [SElem]) -> SEnv a -> a)
+regTemplate :: Stringable a => GenParser Char (Char, Char) (([SElem a], [SElem a]) -> SEnv a -> a)
 regTemplate = do
-  try (functn::GenParser Char (Char,Char) (SEnv String -> SElem)) .>> fail "" <|> return ()
+  try (functn::GenParser Char (Char,Char) (SEnv String -> SElem String)) .>> fail "" <|> return ()
   name <- justSTR <$> word <|> around '(' subexprn ')'
   vals <- around '(' (spaced $ try assgn <|> anonassgn <|> return []) ')'
   return $ join . (. name) . makeTmpl vals

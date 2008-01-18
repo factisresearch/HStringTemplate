@@ -18,8 +18,7 @@
 -- Indentation and wrapping, for example, are implemented through the
 -- HughesPJ Pretty Printing library. Calling toPPDoc on a StringTemplate
 -- yields a Doc with appropriate paragraph-fill wrapping that can be
--- rendered in the usual fashion. (nb: Pretty Printing support is still
--- somewhat fragile when applying attributes to sets of nested templates.)
+-- rendered in the usual fashion.
 --
 -- This library extends the current StringTemplate grammar by allowing the
 -- application of alternating attributes to anonymous
