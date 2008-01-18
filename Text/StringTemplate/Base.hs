@@ -1,8 +1,8 @@
-{-# OPTIONS -O2 -fbang-patterns -fglasgow-exts -fno-monomorphism-restriction #-}
+{-# OPTIONS -fglasgow-exts #-}
 {-# OPTIONS_HADDOCK not-home #-}
 
 module Text.StringTemplate.Base
-    (StringTemplate, StringTemplateShows(..), ToSElem(..), STGen,
+    (StringTemplate, StringTemplateShows(..), ToSElem(..), STGroup,
      Stringable(..),
      toString, toPPDoc, render, newSTMP, newAngleSTMP, getStringTemplate,
      setAttribute, setManyAttrib,
@@ -74,7 +74,7 @@ paddedTrans n as = take (maximum . map length $ as) . trans $ as
 
 -- | A function that generates StringTemplates.
 -- | This is conceptually a query function into a \"group\" of StringTemplates.
-type STGen a = String -> (StFirst (StringTemplate a))
+type STGroup a = String -> (StFirst (StringTemplate a))
 
 -- | A String with \"holes\" in it. StringTemplates may be composed of any
 -- "Stringable" type, which at the moment includes 'String's, 'ByteString's,
@@ -117,25 +117,25 @@ setManyAttrib = flip . foldl' . flip $ uncurry setAttribute
 
 -- | Queries an SGen and returns Just the appropriate StringTemplate if it exists,
 -- otherwise, Nothing.
-getStringTemplate :: (Stringable a) => String -> STGen a -> Maybe (StringTemplate a)
+getStringTemplate :: (Stringable a) => String -> STGroup a -> Maybe (StringTemplate a)
 getStringTemplate s sg = stGetFirst (sg s)
 
 -- | Given a list of named of StringTemplates, returns a group which generates
 -- them such that they can call one another.
-groupStringTemplates :: [(String,StringTemplate a)] -> STGen a
+groupStringTemplates :: [(String,StringTemplate a)] -> STGroup a
 groupStringTemplates xs = newGen
     where newGen s = StFirst (M.lookup s ng)
           ng = foldl' (flip $ uncurry M.insert) M.empty $
                map (second $ sgInsert newGen) xs
 
 -- | Given a path, returns a group which generates all files in said directory.
-stringTemplateFileGroup :: Stringable a => String -> STGen a
+stringTemplateFileGroup :: Stringable a => String -> STGroup a
 stringTemplateFileGroup path = stfg
     where stfg = StFirst . Just . STMP (SEnv M.empty [] stfg) .
                  parseSTMP ('$', '$') . unsafePerformIO . readFile . (path </>)
 
 -- | Adds a set of global options to a group
-optInsertGroup :: [(String, String)] -> STGen a -> STGen a
+optInsertGroup :: [(String, String)] -> STGroup a -> STGroup a
 optInsertGroup opts f = optInsertTmpl opts <$$> f
 
 -- | Adds a set of global options to a single template
@@ -144,22 +144,22 @@ optInsertTmpl x st = st {senv = optInsert (map (second justSTR) x) (senv st)}
 
 -- | Adds a supergroup to any StringTemplate group such that templates from
 -- the original group are now able to call ones from the supergroup as well.
-addSuperGroup :: STGen a -> STGen a -> STGen a
+addSuperGroup :: STGroup a -> STGroup a -> STGroup a
 addSuperGroup f g = sgInsert g <$$> f
 
 -- | Adds a \"subgroup\" to any StringTemplate group such that templates from
 -- the original group now have template calls \"shadowed\" by the subgroup.
-addSubGroup :: STGen a -> STGen a -> STGen a
+addSubGroup :: STGroup a -> STGroup a -> STGroup a
 addSubGroup f g = sgOverride g <$$> f
 
 -- | Merges two groups into a single group. This function is left-biased,
 -- prefering bindings from the first group when there is a conflict.
-mergeSTGroups :: STGen a -> STGen a -> STGen a
+mergeSTGroups :: STGroup a -> STGroup a -> STGroup a
 mergeSTGroups f g = addSuperGroup f g `mappend` addSubGroup g f
 
 -- | Given an integral amount of seconds and a group, returns a group cached for
 -- that span of time. Does not cache \"misses.\"
-cacheSTGroup :: Int -> STGen a -> STGen a
+cacheSTGroup :: Int -> STGroup a -> STGroup a
 cacheSTGroup m g = unsafePerformIO $ go <$> newIORef M.empty
     where go r s = unsafePerformIO $ do
                      mp <- readIORef r
@@ -179,7 +179,7 @@ cacheSTGroup m g = unsafePerformIO $ go <$> newIORef M.empty
                         where found = g s
 
 -- | Returns a group cached forever. Caches \"misses\" as well as hits.
-cacheSTGroupForever :: STGen a -> STGen a
+cacheSTGroupForever :: STGroup a -> STGroup a
 cacheSTGroupForever g = unsafePerformIO $ go <$> newIORef M.empty
     where go r s = unsafePerformIO $ do
                      mp <- readIORef r
@@ -196,7 +196,7 @@ cacheSTGroupForever g = unsafePerformIO $ go <$> newIORef M.empty
 --------------------------------------------------------------------}
 --IMPLEMENT groups having stLookup return a Maybe for regions
 
-data SEnv a = SEnv {smp :: SMap a, sopts :: [(String, (SEnv a -> SElem a))], sgen :: STGen a}
+data SEnv a = SEnv {smp :: SMap a, sopts :: [(String, (SEnv a -> SElem a))], sgen :: STGroup a}
 
 envLookup :: (Monad m) => String -> SEnv a -> m (SElem a)
 envLookup x = M.lookup x . smp
@@ -220,7 +220,7 @@ stLookup x env = maybe (newSTMP ("No Template Found for: " ++ x))
 
 sgInsert :: (String -> StFirst (StringTemplate a)) -> StringTemplate a -> StringTemplate a
 sgInsert   g st = let e = senv st in st {senv = e {sgen = sgen e `mappend` g} }
-sgOverride :: STGen a -> StringTemplate a -> StringTemplate a
+sgOverride :: STGroup a -> StringTemplate a -> StringTemplate a
 sgOverride g st = let e = senv st in st {senv = e {sgen = g `mappend` sgen e} }
 
 parseSTMP :: (Stringable a) => (Char, Char) -> String -> SEnv a -> a

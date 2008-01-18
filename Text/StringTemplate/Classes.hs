@@ -1,4 +1,4 @@
-{-# OPTIONS -O2 -fglasgow-exts #-}
+{-# OPTIONS -fglasgow-exts #-}
 {-# OPTIONS_HADDOCK not-home #-}
 module Text.StringTemplate.Classes
     (SElem(..), StringTemplateShows(..), ToSElem(..), SMap, STShow(..),

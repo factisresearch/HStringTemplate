@@ -1,4 +1,4 @@
-{-# OPTIONS -fbang-patterns -fglasgow-exts -fallow-overlapping-instances -fallow-undecidable-instances #-}
+{-# OPTIONS -fglasgow-exts -fallow-overlapping-instances -fallow-undecidable-instances #-}
 {-# OPTIONS_HADDOCK not-home #-}
 
 module Text.StringTemplate.Instances where

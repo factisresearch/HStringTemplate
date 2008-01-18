@@ -34,7 +34,7 @@
 
 module Text.StringTemplate (
   -- * Types
-  StringTemplate, STGen,
+  StringTemplate, STGroup,
   -- * Classes
   StringTemplateShows(..), ToSElem(..), Stringable(..),
   -- * Creation
