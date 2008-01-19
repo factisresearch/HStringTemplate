@@ -15,17 +15,12 @@ import Data.Maybe
 import Data.Monoid
 import Data.List
 import Text.ParserCombinators.Parsec
-import System.Time
-import System.IO
-import System.FilePath
-import Data.IORef
-import System.IO.Unsafe
 import qualified Data.Map as M
 import qualified Text.PrettyPrint.HughesPJ as PP
 
 import Text.StringTemplate.Classes
 --import Debug.Trace --DEBUG
---import Text.StringTemplate.Instances()
+import Text.StringTemplate.Instances()
 
 {--------------------------------------------------------------------
   Generic Utilities
@@ -109,8 +104,8 @@ setAttribute s x st = st {senv = envInsApp s (toSElem x) (senv st)}
 setManyAttrib :: (ToSElem a, Stringable b) => [(String, a)] -> StringTemplate b -> StringTemplate b
 setManyAttrib = flip . foldl' . flip $ uncurry setAttribute
 
--- | Queries an SGen and returns Just the appropriate StringTemplate if it exists,
--- otherwise, Nothing.
+-- | Queries an SGen and returns Just the appropriate StringTemplate if it
+-- exists, otherwise, Nothing.
 getStringTemplate :: (Stringable a) => String -> STGroup a -> Maybe (StringTemplate a)
 getStringTemplate s sg = stGetFirst (sg s)
 
@@ -218,8 +213,8 @@ subStmp = do
                          <|> try (around ca optExpr cb)
                          <|> try comment <|> blank  <?> "subtemplate")
   return (st `o` udEnv)
-      where transform an (att,i:i0:[]) =
-                flip (foldr envInsert) $ zip ("i":"i0":an) (i:i0:att)
+      where transform an (att,is) =
+                flip (foldr envInsert) $ zip ("i":"i0":an) (is++att)
             attribNames = (char '|' >>) . return =<< comlist (spaced word)
 
 comment :: Stringable a => GenParser Char (Char,Char) (SEnv a -> a)
@@ -374,7 +369,7 @@ pluslen xs = zip (map (:[]) xs) $ mkIndex [0..(length xs)]
 liTrans :: [SElem a] -> [([SElem a], [SElem a])]
 liTrans = pluslen' . paddedTrans SNull . map u
     where u (LI x) = x; u x = [x]
-          pluslen' xss@(x:_) = zip xss $ mkIndex [0..(length x)]
+          pluslen' xs = zip xs $ mkIndex [0..(length (head xs))]
 
 iterApp :: Stringable a => [([SElem a], [SElem a]) -> SEnv a -> a] -> [SElem a] -> SEnv a -> a
 iterApp [f] (LI xs:[]) = (mconcatMap $ pluslen xs) . flip f
