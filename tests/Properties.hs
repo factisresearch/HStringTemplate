@@ -15,7 +15,8 @@ import qualified Data.Map as M
 import Text.StringTemplate.Classes
 import Text.StringTemplate.Instances
 import Text.StringTemplate.Base
-import Test.QuickCheck hiding (promote)
+import Text.StringTemplate.Group
+import Test.QuickCheck
 import System.Environment
 
 main :: IO ()
@@ -80,7 +81,7 @@ prop_separator (LitString x) (LitString y) (LitString z) i =
     where tmpl = "$"++x++";separator='"++z++"'$"
 
 prop_simpleGroup (LitString x) (LitString y) (LitString z) (LitString t) =
-    length x > 0 && length y > 0 && length z > 0 && length t > 0 
+    length x > 0 && length y > 0 && length z > 0 && length t > 0
                && length (nub [x,y,z,t]) == 4 ==>
                   x == (toString . fromJust . getStringTemplate x $ grp)
     where tm   = newSTMP x

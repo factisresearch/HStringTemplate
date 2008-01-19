@@ -2,13 +2,11 @@
 {-# OPTIONS_HADDOCK not-home #-}
 
 module Text.StringTemplate.Base
-    (StringTemplate, StringTemplateShows(..), ToSElem(..), STGroup,
+    (StringTemplate(..), StringTemplateShows(..), ToSElem(..), STGroup,
      Stringable(..),
      toString, toPPDoc, render, newSTMP, newAngleSTMP, getStringTemplate,
-     setAttribute, setManyAttrib,
-     groupStringTemplates, addSuperGroup, addSubGroup,
-     mergeSTGroups, stringTemplateFileGroup, cacheSTGroup, cacheSTGroupForever,
-     optInsertGroup, optInsertTmpl, paddedTrans
+     setAttribute, setManyAttrib, optInsertTmpl,
+     paddedTrans, SEnv(..), parseSTMP
     ) where
 import Control.Monad
 import Control.Arrow hiding (pure)
@@ -47,9 +45,6 @@ infixr 3 |.
 (.>>) f g = f >> g
 infixr 5 .>>
 
-(<$$>) :: (Functor f1, Functor f) => (a -> b) -> f (f1 a) -> f (f1 b)
-(<$$>) x y = ((<$>) . (<$>)) x y
-
 fromMany :: b -> ([a] -> b) -> [a] -> b
 fromMany e _ [] = e
 fromMany _ f xs  = f xs
@@ -70,7 +65,6 @@ paddedTrans n as = take (maximum . map length $ as) . trans $ as
 {--------------------------------------------------------------------
   StringTemplate and the API
 --------------------------------------------------------------------}
---add noInline to unsafe methods?
 
 -- | A function that generates StringTemplates.
 -- | This is conceptually a query function into a \"group\" of StringTemplates.
@@ -120,76 +114,9 @@ setManyAttrib = flip . foldl' . flip $ uncurry setAttribute
 getStringTemplate :: (Stringable a) => String -> STGroup a -> Maybe (StringTemplate a)
 getStringTemplate s sg = stGetFirst (sg s)
 
--- | Given a list of named of StringTemplates, returns a group which generates
--- them such that they can call one another.
-groupStringTemplates :: [(String,StringTemplate a)] -> STGroup a
-groupStringTemplates xs = newGen
-    where newGen s = StFirst (M.lookup s ng)
-          ng = foldl' (flip $ uncurry M.insert) M.empty $
-               map (second $ sgInsert newGen) xs
-
--- | Given a path, returns a group which generates all files in said directory.
-stringTemplateFileGroup :: Stringable a => String -> STGroup a
-stringTemplateFileGroup path = stfg
-    where stfg = StFirst . Just . STMP (SEnv M.empty [] stfg) .
-                 parseSTMP ('$', '$') . unsafePerformIO . readFile . (path </>)
-
--- | Adds a set of global options to a group
-optInsertGroup :: [(String, String)] -> STGroup a -> STGroup a
-optInsertGroup opts f = optInsertTmpl opts <$$> f
-
 -- | Adds a set of global options to a single template
 optInsertTmpl :: [(String, String)] -> StringTemplate a -> StringTemplate a
 optInsertTmpl x st = st {senv = optInsert (map (second justSTR) x) (senv st)}
-
--- | Adds a supergroup to any StringTemplate group such that templates from
--- the original group are now able to call ones from the supergroup as well.
-addSuperGroup :: STGroup a -> STGroup a -> STGroup a
-addSuperGroup f g = sgInsert g <$$> f
-
--- | Adds a \"subgroup\" to any StringTemplate group such that templates from
--- the original group now have template calls \"shadowed\" by the subgroup.
-addSubGroup :: STGroup a -> STGroup a -> STGroup a
-addSubGroup f g = sgOverride g <$$> f
-
--- | Merges two groups into a single group. This function is left-biased,
--- prefering bindings from the first group when there is a conflict.
-mergeSTGroups :: STGroup a -> STGroup a -> STGroup a
-mergeSTGroups f g = addSuperGroup f g `mappend` addSubGroup g f
-
--- | Given an integral amount of seconds and a group, returns a group cached for
--- that span of time. Does not cache \"misses.\"
-cacheSTGroup :: Int -> STGroup a -> STGroup a
-cacheSTGroup m g = unsafePerformIO $ go <$> newIORef M.empty
-    where go r s = unsafePerformIO $ do
-                     mp <- readIORef r
-                     now <- getClockTime
-                     maybe (udReturn now)
-                      (\(t, st) -> if (tdSec . normalizeTimeDiff $
-                           diffClockTimes now t) > m
-                         then udReturn now
-                         else return st)
-                      . M.lookup s $ mp
-              where udReturn now = maybe (return found)
-                                   (const $ do
-                                      atomicModifyIORef r $
-                                         flip (,) () . M.insert s (now, found)
-                                      return found)
-                                     . stGetFirst $ found
-                        where found = g s
-
--- | Returns a group cached forever. Caches \"misses\" as well as hits.
-cacheSTGroupForever :: STGroup a -> STGroup a
-cacheSTGroupForever g = unsafePerformIO $ go <$> newIORef M.empty
-    where go r s = unsafePerformIO $ do
-                     mp <- readIORef r
-                     maybe udReturn
-                      return . M.lookup s $ mp
-              where udReturn = do
-                                let st = g s
-                                atomicModifyIORef r $
-                                  flip (,) () . M.insert s st
-                                return st
 
 {--------------------------------------------------------------------
   Internal API
@@ -217,11 +144,6 @@ nullOpt = fromMaybe (justSTR "") =<< optLookup "null"
 stLookup :: (Stringable a) => [Char] -> SEnv a -> StringTemplate a
 stLookup x env = maybe (newSTMP ("No Template Found for: " ++ x))
                  (\st-> st {senv = env}) $ stGetFirst (sgen env x)
-
-sgInsert :: (String -> StFirst (StringTemplate a)) -> StringTemplate a -> StringTemplate a
-sgInsert   g st = let e = senv st in st {senv = e {sgen = sgen e `mappend` g} }
-sgOverride :: STGroup a -> StringTemplate a -> StringTemplate a
-sgOverride g st = let e = senv st in st {senv = e {sgen = g `mappend` sgen e} }
 
 parseSTMP :: (Stringable a) => (Char, Char) -> String -> SEnv a -> a
 parseSTMP x = either (showStr .  show) (id) . runParser (stmpl False) x ""
@@ -468,7 +390,8 @@ anonTmpl = around '{' subStmp '}'
 regTemplate :: Stringable a => GenParser Char (Char, Char) (([SElem a], [SElem a]) -> SEnv a -> a)
 regTemplate = do
   try (functn::GenParser Char (Char,Char) (SEnv String -> SElem String)) .>> fail "" <|> return ()
-  name <- justSTR <$> word <|> around '(' subexprn ')'
+  name <- justSTR <$> many1 (alphaNum <|> char '.' <|> char '/')
+          <|> around '(' subexprn ')'
   vals <- around '(' (spaced $ try assgn <|> anonassgn <|> return []) ')'
   return $ join . (. name) . makeTmpl vals
       where makeTmpl v ((se:_),is) (STR x)  =

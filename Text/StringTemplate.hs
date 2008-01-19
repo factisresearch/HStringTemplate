@@ -38,15 +38,15 @@ module Text.StringTemplate (
   -- * Classes
   StringTemplateShows(..), ToSElem(..), Stringable(..),
   -- * Creation
-  newSTMP, newAngleSTMP, stringTemplateFileGroup,
+  newSTMP, newAngleSTMP, getStringTemplate,
   -- * Display
   toString, toPPDoc, render,
   -- * Modification
-  setAttribute, setManyAttrib, optInsertGroup, optInsertTmpl,
+  setAttribute, setManyAttrib, optInsertTmpl, optInsertGroup,
   -- * Groups
-  getStringTemplate,
   groupStringTemplates, addSuperGroup, addSubGroup,
-  mergeSTGroups, cacheSTGroup, cacheSTGroupForever
+  mergeSTGroups, directoryGroup, unsafeVolatileDirectoryGroup
   ) where
 import Text.StringTemplate.Base
+import Text.StringTemplate.Group
 import Text.StringTemplate.Instances()
