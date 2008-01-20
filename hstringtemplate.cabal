@@ -16,7 +16,7 @@ flag small-base
 
 library
   if flag(small-base)
-    build-depends:     base >= 3, filepath, parsec, containers, pretty, old-time, bytestring
+    build-depends:     base >= 3, filepath, parsec, containers, pretty, old-time, bytestring, directory
   else
     build-depends:     base < 3, filepath, parsec
   exposed-modules:   Text.StringTemplate
