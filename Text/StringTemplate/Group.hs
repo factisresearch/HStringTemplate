@@ -14,6 +14,7 @@ import System.FilePath
 import System.Directory
 import Data.IORef
 import System.IO.Unsafe
+import System.IO.Error
 import qualified Data.Map as M
 
 import Text.StringTemplate.Base
@@ -46,14 +47,14 @@ groupStringTemplates xs = newGen
 
 -- | Given a path, returns a group which generates all files in said directory
 -- which have the proper "st" extension.
--- This function is strict, with all files read once.
+-- This function is strict, with all files read once. As it performs file IO,
+-- expect it to throw the usual exceptions.
 directoryGroup :: (Stringable a) => FilePath -> IO (STGroup a)
-directoryGroup path = flip catch (const . return . const $ mempty)
-                      (groupStringTemplates <$>
-                       (fmap <$> zip . (map dropExtension)
-                        <*> mapM (newSTMP <$$> readFile)
-                        =<< filter (("st" ==) . takeExtension)
-                          <$> getDirectoryContents path))
+directoryGroup path = groupStringTemplates <$>
+                      (fmap <$> zip . (map dropExtension)
+                       <*> mapM (newSTMP <$$> readFile)
+                           =<< filter (("st" ==) . takeExtension)
+                       <$> getDirectoryContents path)
 
 -- | Adds a supergroup to any StringTemplate group such that templates from
 -- the original group are now able to call ones from the supergroup as well.
@@ -74,16 +75,22 @@ mergeSTGroups f g = addSuperGroup f g `mappend` addSubGroup g f
 optInsertGroup :: [(String, String)] -> STGroup a -> STGroup a
 optInsertGroup opts f = optInsertTmpl opts <$$> f
 
+
+{-# NOINLINE unsafeVolatileDirectoryGroup #-}
+
 -- | Given an integral amount of seconds and a path, returns a group generating
 -- all files in said directory with the proper "st" extension,
--- cached for that amount of seconds.
+-- cached for that amount of seconds. IO errors are "swallowed" by this so
+-- that exceptions don't arise in unexpected places.
 -- This violates referential transparency, but can be very useful in developing
 -- templates for any sort of server application.
 -- It should be swapped out for production purposes.
 unsafeVolatileDirectoryGroup :: Stringable a => String -> Int -> IO (STGroup a)
 unsafeVolatileDirectoryGroup path i = return (cacheSTGroup i stfg)
-    where stfg = StFirst . Just . STMP (SEnv M.empty [] stfg) .
-                 parseSTMP ('$', '$') . unsafePerformIO . readFile . (path </>)
+    where stfg = StFirst . Just . STMP (SEnv M.empty [] stfg)
+                 . parseSTMP ('$', '$') . unsafePerformIO . flip catch
+                       (return . ("IO Error: " ++) . ioeGetErrorString)
+                 . readFile . (path </>)
           cacheSTGroup :: Int -> STGroup a -> STGroup a
           cacheSTGroup m g = unsafePerformIO $ go <$> newIORef M.empty
               where go r s = unsafePerformIO $ do
@@ -91,14 +98,12 @@ unsafeVolatileDirectoryGroup path i = return (cacheSTGroup i stfg)
                                now <- getClockTime
                                maybe (udReturn now)
                                 (\(t, st) -> if (tdSec . normalizeTimeDiff $
-                                    diffClockTimes now t) > m
+                                                 diffClockTimes now t) > m
                                              then udReturn now
                                              else return st)
                                 . M.lookup s $ mp
-                        where udReturn now = maybe (return found)
-                                               (const $ do
-                                                  atomicModifyIORef r $
-                                                     flip (,) () . M.insert s (now, found)
-                                                  return found)
-                                             . stGetFirst $ found
-                                  where found = g s
+                        where udReturn now = do
+                                let st = g s
+                                atomicModifyIORef r $
+                                  flip (,) () . M.insert s (now, st)
+                                return st

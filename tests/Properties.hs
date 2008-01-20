@@ -19,6 +19,9 @@ import Text.StringTemplate.Group
 import Test.QuickCheck
 import System.Environment
 
+--import Debug.Trace
+--mytrace h x = trace (h ++ ": " ++ x) $ x
+
 main :: IO ()
 main = do
     args <- getArgs
@@ -35,6 +38,8 @@ main = do
          ("prop_fullNulls" , mytest prop_fullNulls),
          ("prop_substitution" , mytest prop_substitution),
          ("prop_separator" , mytest prop_separator),
+         ("prop_comment" , mytest prop_comment),
+         ("prop_ifelse" , mytest prop_ifelse),
          ("prop_simpleGroup" , mytest prop_simpleGroup)
         ]
 
@@ -79,6 +84,13 @@ prop_separator (LitString x) (LitString y) (LitString z) i =
                (toString . setAttribute x (replicate (abs i) y)
                 . newSTMP $ tmpl)
     where tmpl = "$"++x++";separator='"++z++"'$"
+
+prop_comment (LitString x) (LitString y) (LitString z) =
+    toString (newSTMP (x ++ "$!" ++ y ++ "!$" ++ z)) == x ++ z
+
+prop_ifelse a b c d =
+    toString (setManyAttrib alist . newSTMP $ "$if(a)$a$elseif(b)$b$elseif(c)$c$else$$if(d)$d$else$e$endif$$endif$") == (fst . head . filter snd) alist
+        where alist = [("a",a),("b",b),("c",c),("d",d),("e",True)]
 
 prop_simpleGroup (LitString x) (LitString y) (LitString z) (LitString t) =
     length x > 0 && length y > 0 && length z > 0 && length t > 0

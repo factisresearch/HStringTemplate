@@ -398,9 +398,9 @@ regTemplate = do
             assgn = (spaced word >>= (<$> char '=' .>> spaced subexprn) . (,))
                     `sepEndBy1` char ';'
 
-{- DEBUG
+--DEBUG
 
-pTrace s = pt <|> return ()
+{-pTrace s = pt <|> return ()
     where pt = try $
                do
                  x <- try $ many1 anyChar

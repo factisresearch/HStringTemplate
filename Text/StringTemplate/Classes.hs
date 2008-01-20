@@ -1,4 +1,4 @@
-{-# OPTIONS  -fglasgow-exts #-}
+{-# OPTIONS -fglasgow-exts #-}
 {-# OPTIONS_HADDOCK not-home #-}
 module Text.StringTemplate.Classes
     (SElem(..), StringTemplateShows(..), ToSElem(..), SMap, STShow(..),
@@ -30,6 +30,8 @@ data SElem a = STR String | STSH STShow | SM (SMap a) | LI [SElem a] | SBLE a | 
 -- but rather for containers, most easily by reducing them to maps or lists.
 class ToSElem a where
     toSElem :: Stringable b => a -> SElem b
+    toSElemList :: Stringable b => [a] -> SElem b
+    toSElemList = LI . map toSElem
 
 -- | The StringTemplateShows class should be instantiated for all types that are
 -- directly displayed in a StringTemplate. Its methods all have defaults.

@@ -16,15 +16,16 @@ import Data.Maybe
 --Todo: provide instances of StringTemplateShows for dates
 --      and other common cases.
 
-instance ToSElem String where
-    toSElem = STR
-
+instance ToSElem Char where
+    toSElem = STR . (:[])
+    toSElemList = STR
+    
 instance ToSElem Bool where
     toSElem True = STR ""
     toSElem _ = SNull
 
 instance (ToSElem a) => ToSElem [a] where
-    toSElem = LI . map toSElem
+    toSElem = toSElemList
 
 instance (ToSElem a) => ToSElem (M.Map String a) where
     toSElem = SM . fmap toSElem
@@ -32,7 +33,7 @@ instance (ToSElem a) => ToSElem (M.Map String a) where
 instance (StringTemplateShows a) => ToSElem a where
     toSElem = STSH . STShow
 
-instance (Show a, Eq a, Ord a) => StringTemplateShows a where
+instance (Show a) => StringTemplateShows a where
     stringTemplateShow a = show a
 
 instance StringTemplateShows Float where
