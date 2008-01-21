@@ -5,7 +5,7 @@ module Text.StringTemplate.Base
     (StringTemplate(..), StringTemplateShows(..), ToSElem(..), STGroup,
      Stringable(..),
      toString, toPPDoc, render, newSTMP, newAngleSTMP, getStringTemplate,
-     setAttribute, setManyAttrib, optInsertTmpl,
+     setAttribute, setManyAttrib, optInsertTmpl, setEncoder,
      paddedTrans, SEnv(..), parseSTMP
     ) where
 import Control.Monad
@@ -87,12 +87,12 @@ render = runSTMP <*> senv
 -- | Parses a String to produce a StringTemplate, with \'$\'s as delimiters.
 -- It is constructed with a stub group that cannot look up other templates.
 newSTMP :: Stringable a => String -> StringTemplate a
-newSTMP = STMP (SEnv M.empty [] mempty) . parseSTMP ('$','$')
+newSTMP = STMP (SEnv M.empty [] mempty id) . parseSTMP ('$','$')
 
 -- | Parses a String to produce a StringTemplate, delimited by \'<\' and \'>\'.
 -- It is constructed with a stub group that cannot look up other templates.
 newAngleSTMP :: Stringable a => String -> StringTemplate a
-newAngleSTMP = STMP (SEnv M.empty [] mempty) . parseSTMP ('$','$')
+newAngleSTMP = STMP (SEnv M.empty [] mempty id) . parseSTMP ('$','$')
 
 -- | Yields a StringTemplate with the appropriate attribute set.
 -- If the attribute already exists, it is appended to a list.
@@ -104,8 +104,8 @@ setAttribute s x st = st {senv = envInsApp s (toSElem x) (senv st)}
 setManyAttrib :: (ToSElem a, Stringable b) => [(String, a)] -> StringTemplate b -> StringTemplate b
 setManyAttrib = flip . foldl' . flip $ uncurry setAttribute
 
--- | Queries an SGen and returns Just the appropriate StringTemplate if it
--- exists, otherwise, Nothing.
+-- | Queries an String Template Group and returns Just the appropriate
+-- StringTemplate if it exists, otherwise, Nothing.
 getStringTemplate :: (Stringable a) => String -> STGroup a -> Maybe (StringTemplate a)
 getStringTemplate s sg = stGetFirst (sg s)
 
@@ -113,12 +113,17 @@ getStringTemplate s sg = stGetFirst (sg s)
 optInsertTmpl :: [(String, String)] -> StringTemplate a -> StringTemplate a
 optInsertTmpl x st = st {senv = optInsert (map (second justSTR) x) (senv st)}
 
+-- | Sets an encoding function of a template that all values are
+-- rendered with. Text.Html.stringToHtmlString, for example.
+setEncoder :: (Stringable a) => (String -> String) -> StringTemplate a -> StringTemplate a
+setEncoder x st = st {senv = (senv st) {senc = x} }
+
 {--------------------------------------------------------------------
   Internal API
 --------------------------------------------------------------------}
 --IMPLEMENT groups having stLookup return a Maybe for regions
 
-data SEnv a = SEnv {smp :: SMap a, sopts :: [(String, (SEnv a -> SElem a))], sgen :: STGroup a}
+data SEnv a = SEnv {smp :: SMap a, sopts :: [(String, (SEnv a -> SElem a))], sgen :: STGroup a, senc :: String -> String}
 
 envLookup :: (Monad m) => String -> SEnv a -> m (SElem a)
 envLookup x = M.lookup x . smp

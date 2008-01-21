@@ -2,7 +2,7 @@
 {-# OPTIONS_HADDOCK not-home #-}
 
 module Text.StringTemplate.Group
-    (groupStringTemplates, addSuperGroup, addSubGroup,
+    (groupStringTemplates, addSuperGroup, addSubGroup, setEncoderGroup,
      mergeSTGroups, directoryGroup, optInsertGroup, unsafeVolatileDirectoryGroup
     ) where
 import Control.Applicative hiding ((<|>),many)
@@ -75,6 +75,10 @@ mergeSTGroups f g = addSuperGroup f g `mappend` addSubGroup g f
 optInsertGroup :: [(String, String)] -> STGroup a -> STGroup a
 optInsertGroup opts f = optInsertTmpl opts <$$> f
 
+-- | Sets an encoding function of a group that all values are
+-- rendered with in each enclosed template
+setEncoderGroup :: (Stringable a) => (String -> String) ->  STGroup a -> STGroup a
+setEncoderGroup x f = setEncoder x <$$> f
 
 {-# NOINLINE unsafeVolatileDirectoryGroup #-}
 
@@ -87,7 +91,7 @@ optInsertGroup opts f = optInsertTmpl opts <$$> f
 -- It should be swapped out for production purposes.
 unsafeVolatileDirectoryGroup :: Stringable a => String -> Int -> IO (STGroup a)
 unsafeVolatileDirectoryGroup path i = return (cacheSTGroup i stfg)
-    where stfg = StFirst . Just . STMP (SEnv M.empty [] stfg)
+    where stfg = StFirst . Just . STMP (SEnv M.empty [] stfg id)
                  . parseSTMP ('$', '$') . unsafePerformIO . flip catch
                        (return . ("IO Error: " ++) . ioeGetErrorString)
                  . readFile . (path </>)
