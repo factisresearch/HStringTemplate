@@ -36,13 +36,14 @@ module Text.StringTemplate (
   -- * Types
   StringTemplate, STGroup,
   -- * Classes
-  StringTemplateShows(..), ToSElem(..), Stringable(..),
+  StringTemplateShows(..), ToSElem(..), stShowsToSE, Stringable(..),
   -- * Creation
   newSTMP, newAngleSTMP, getStringTemplate,
   -- * Display
   toString, toPPDoc, render,
   -- * Modification
-  setAttribute, setManyAttrib, optInsertTmpl, optInsertGroup,
+  setAttribute, setManyAttrib, withContext,
+  optInsertTmpl, optInsertGroup,
   setEncoder, setEncoderGroup,
   -- * Groups
   groupStringTemplates, addSuperGroup, addSubGroup,

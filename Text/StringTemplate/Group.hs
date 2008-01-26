@@ -1,4 +1,3 @@
-{-# OPTIONS -fglasgow-exts #-}
 {-# OPTIONS_HADDOCK not-home #-}
 
 module Text.StringTemplate.Group

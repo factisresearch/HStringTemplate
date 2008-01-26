@@ -38,6 +38,7 @@ main = do
          ("prop_fullNulls" , mytest prop_fullNulls),
          ("prop_substitution" , mytest prop_substitution),
          ("prop_separator" , mytest prop_separator),
+         ("prop_attribs" , mytest prop_attribs),
          ("prop_comment" , mytest prop_comment),
          ("prop_ifelse" , mytest prop_ifelse),
          ("prop_simpleGroup" , mytest prop_simpleGroup)
@@ -87,6 +88,10 @@ prop_separator (LitString x) (LitString y) (LitString z) i =
 
 prop_comment (LitString x) (LitString y) (LitString z) =
     toString (newSTMP (x ++ "$!" ++ y ++ "!$" ++ z)) == x ++ z
+
+prop_attribs (LitString x) i =
+    toString (setManyAttrib (replicate (abs i) ("f",x)) $ newSTMP "$f$")
+                 == (concat . replicate (abs i) $ x)
 
 prop_ifelse a b c d =
     toString (setManyAttrib alist . newSTMP $ "$if(a)$a$elseif(b)$b$elseif(c)$c$else$$if(d)$d$else$e$endif$$endif$") == (fst . head . filter snd) alist

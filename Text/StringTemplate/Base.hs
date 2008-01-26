@@ -1,11 +1,10 @@
-{-# OPTIONS -fglasgow-exts #-}
 {-# OPTIONS_HADDOCK not-home #-}
 
 module Text.StringTemplate.Base
     (StringTemplate(..), StringTemplateShows(..), ToSElem(..), STGroup,
-     Stringable(..),
+     Stringable(..), stShowsToSE,
      toString, toPPDoc, render, newSTMP, newAngleSTMP, getStringTemplate,
-     setAttribute, setManyAttrib, optInsertTmpl, setEncoder,
+     setAttribute, setManyAttrib, withContext, optInsertTmpl, setEncoder,
      paddedTrans, SEnv(..), parseSTMP
     ) where
 import Control.Monad
@@ -50,9 +49,9 @@ swing = flip . (. flip id)
 paddedTrans :: a -> [[a]] -> [[a]]
 paddedTrans _ [] = []
 paddedTrans n as = take (maximum . map length $ as) . trans $ as
-    where trans [] = [];
-          trans ([] : xss)  = (n : map h xss) :  trans ([n] : (map t xss))
+    where trans ([] : xss)  = (n : map h xss) :  trans ([n] : (map t xss))
           trans ((x : xs) : xss) = (x : map h xss) : trans (m xs : (map t xss))
+          trans _ = [];
           h (x:_) = x; h _ = n; t (_:y:xs) = (y:xs); t _ = [n];
           m (x:xs) = (x:xs); m _ = [n];
 
@@ -103,6 +102,15 @@ setAttribute s x st = st {senv = envInsApp s (toSElem x) (senv st)}
 -- If any attribute already exists, it is appended to a list.
 setManyAttrib :: (ToSElem a, Stringable b) => [(String, a)] -> StringTemplate b -> StringTemplate b
 setManyAttrib = flip . foldl' . flip $ uncurry setAttribute
+
+-- | Replaces the attributes of a StringTemplate with those
+-- described in the second argument. If the argument does not yield
+-- a set of named attributes but only a single one, that attribute
+-- is named, as a default, "it".
+withContext :: (ToSElem a, Stringable b) => StringTemplate b -> a -> StringTemplate b
+withContext st x = case toSElem x of
+                     SM a -> st {senv = (senv st) {smp = a}}
+                     b -> st {senv = (senv st) {smp = M.singleton "it" b}}
 
 -- | Queries an String Template Group and returns Just the appropriate
 -- StringTemplate if it exists, otherwise, Nothing.
@@ -155,14 +163,15 @@ parseSTMP x = either (showStr .  show) (id) . runParser (stmpl False) x ""
 showVal :: Stringable a => SEnv a -> SElem a -> a
 showVal snv se =
     case se of (STR x) -> stFromString x
-               (LI xs) -> joinUp xs
-               (SM sm) -> joinUp $ M.elems sm
+               (LI xs) -> joinUpWith showVal xs
+               (SM sm) -> joinUpWith showAssoc $ M.assocs sm
                (STSH x) -> stFromString (format x)
                (SBLE x) -> x
                SNull -> showVal <*> nullOpt $ snv
     where sepVal = fromMaybe (justSTR "") =<< optLookup "separator" $ snv
           format = maybe stshow . stfshow <*> optLookup "format" $ snv
-          joinUp = mintercalate (showVal snv sepVal) . map (showVal snv)
+          joinUpWith f = mintercalate (showVal snv sepVal) . map (f snv)
+          showAssoc e (k,v) = stFromString (k ++ ": ") `mlabel` showVal e v
 
 showStr :: Stringable a => String -> SEnv a -> a
 showStr = flip showVal . STR
