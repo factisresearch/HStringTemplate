@@ -61,11 +61,11 @@ paddedTrans n as = take (maximum . map length $ as) . trans $ as
 --------------------------------------------------------------------}
 
 -- | A function that generates StringTemplates.
--- | This is conceptually a query function into a \"group\" of StringTemplates.
+-- This is conceptually a query function into a \"group\" of StringTemplates.
 type STGroup a = String -> (StFirst (StringTemplate a))
 
 -- | A String with \"holes\" in it. StringTemplates may be composed of any
--- "Stringable" type, which at the moment includes 'String's, 'ByteString's,
+-- 'Stringable' type, which at the moment includes 'String's, 'ByteString's,
 -- PrettyPrinter 'Doc's, and 'Endo' 'String's, which are actually of type
 -- 'ShowS'. When a StringTemplate is composed of a type, its internals are
 -- as well, so it is, so to speak \"turtles all the way down.\"
@@ -75,7 +75,7 @@ data StringTemplate a = STMP {senv :: SEnv a,  runSTMP :: SEnv a -> a}
 toString :: StringTemplate String -> String
 toString = render
 
--- | Renders a StringTemplate to a HughesPJ Pretty Printer Doc.
+-- | Renders a StringTemplate to a 'Text.PrettyPrint.HughesPJ.Doc'.
 toPPDoc :: StringTemplate PP.Doc -> PP.Doc
 toPPDoc = render
 
@@ -88,7 +88,7 @@ render = runSTMP <*> senv
 newSTMP :: Stringable a => String -> StringTemplate a
 newSTMP = STMP (SEnv M.empty [] mempty id) . parseSTMP ('$','$')
 
--- | Parses a String to produce a StringTemplate, delimited by \'<\' and \'>\'.
+-- | Parses a String to produce a StringTemplate, delimited by angle brackets.
 -- It is constructed with a stub group that cannot look up other templates.
 newAngleSTMP :: Stringable a => String -> StringTemplate a
 newAngleSTMP = STMP (SEnv M.empty [] mempty id) . parseSTMP ('$','$')
@@ -106,7 +106,7 @@ setManyAttrib = flip . foldl' . flip $ uncurry setAttribute
 -- | Replaces the attributes of a StringTemplate with those
 -- described in the second argument. If the argument does not yield
 -- a set of named attributes but only a single one, that attribute
--- is named, as a default, "it".
+-- is named, as a default, \"it\".
 withContext :: (ToSElem a, Stringable b) => StringTemplate b -> a -> StringTemplate b
 withContext st x = case toSElem x of
                      SM a -> st {senv = (senv st) {smp = a}}
@@ -122,7 +122,7 @@ optInsertTmpl :: [(String, String)] -> StringTemplate a -> StringTemplate a
 optInsertTmpl x st = st {senv = optInsert (map (second justSTR) x) (senv st)}
 
 -- | Sets an encoding function of a template that all values are
--- rendered with. Text.Html.stringToHtmlString, for example.
+-- rendered with. For example one useful encoder would be 'Text.Html.stringToHtmlString'. All attributes will be encoded once and only once.
 setEncoder :: (Stringable a) => (String -> String) -> StringTemplate a -> StringTemplate a
 setEncoder x st = st {senv = (senv st) {senc = x} }
 
@@ -162,16 +162,17 @@ parseSTMP x = either (showStr .  show) (id) . runParser (stmpl False) x ""
 
 showVal :: Stringable a => SEnv a -> SElem a -> a
 showVal snv se =
-    case se of (STR x) -> stFromString x
+    case se of (STR x) -> stEncode x
                (LI xs) -> joinUpWith showVal xs
                (SM sm) -> joinUpWith showAssoc $ M.assocs sm
-               (STSH x) -> stFromString (format x)
+               (STSH x) -> stEncode (format x)
                (SBLE x) -> x
                SNull -> showVal <*> nullOpt $ snv
     where sepVal = fromMaybe (justSTR "") =<< optLookup "separator" $ snv
           format = maybe stshow . stfshow <*> optLookup "format" $ snv
           joinUpWith f = mintercalate (showVal snv sepVal) . map (f snv)
-          showAssoc e (k,v) = stFromString (k ++ ": ") `mlabel` showVal e v
+          showAssoc e (k,v) = stEncode (k ++ ": ") `mlabel` showVal e v
+          stEncode = stFromString . senc snv
 
 showStr :: Stringable a => String -> SEnv a -> a
 showStr = flip showVal . STR

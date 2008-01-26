@@ -11,14 +11,14 @@ import Text.StringTemplate.Group
 import Test.HUnit
 import System.Environment
 
-no_prop = toString (setAttribute "foo" "f" $ newSTMP "a$foo.bar$a") 
-          ~=? "aa" 
+no_prop = toString (setAttribute "foo" "f" $ newSTMP "a$foo.bar$a")
+          ~=? "aa"
 
-one_prop = toString (setAttribute "foo" (M.singleton "bar" "baz") $ newSTMP "a$foo.bar$a") 
-           ~=? "abaza" 
+one_prop = toString (setAttribute "foo" (M.singleton "bar" "baz") $ newSTMP "a$foo.bar$a")
+           ~=? "abaza"
 
 anon_tmpl = toString (setAttribute "foo" "f" $ newSTMP "a$foo:{{$foo$\\}}$a")
-            ~=? "a{f}a" 
+            ~=? "a{f}a"
 
 setA = setAttribute "foo" ["a","b","c"]
 func_first = toString (setA $ newSTMP "$first(foo)$") ~=? "a"
@@ -26,7 +26,7 @@ func_last = toString (setA $ newSTMP "$last(foo)$") ~=? "c"
 func_rest = toString (setA $ newSTMP "$rest(foo)$") ~=? "bc"
 func_length = toString (setA $ newSTMP "$length(foo)$") ~=? "3"
 
-tests = TestList ["no_prop" ~: no_prop, 
+tests = TestList ["no_prop" ~: no_prop,
                   "one_prop" ~: one_prop,
                   "func_first" ~: func_first,
                   "func_last" ~: func_last,

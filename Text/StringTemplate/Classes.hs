@@ -25,7 +25,7 @@ type SMap a = M.Map String (SElem a)
 data SElem a = STR String | STSH STShow | SM (SMap a) | LI [SElem a] | SBLE a | SNull
 
 -- | The ToSElem class should be instantiated for all types that can be
--- inserted as attributes into a StringTemplate. 
+-- inserted as attributes into a StringTemplate.
 class ToSElem a where
     toSElem :: Stringable b => a -> SElem b
     toSElemList :: Stringable b => [a] -> SElem b

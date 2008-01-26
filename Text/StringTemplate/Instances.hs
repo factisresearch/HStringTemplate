@@ -20,7 +20,7 @@ import Data.Maybe
 instance ToSElem Char where
     toSElem = STR . (:[])
     toSElemList = STR
-    
+
 instance ToSElem Bool where
     toSElem True = STR ""
     toSElem _ = SNull

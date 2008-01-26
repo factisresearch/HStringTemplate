@@ -45,7 +45,7 @@ groupStringTemplates xs = newGen
                map (second $ sgInsert newGen) xs
 
 -- | Given a path, returns a group which generates all files in said directory
--- which have the proper "st" extension.
+-- which have the proper \"st\" extension.
 -- This function is strict, with all files read once. As it performs file IO,
 -- expect it to throw the usual exceptions.
 directoryGroup :: (Stringable a) => FilePath -> IO (STGroup a)
@@ -82,8 +82,8 @@ setEncoderGroup x f = setEncoder x <$$> f
 {-# NOINLINE unsafeVolatileDirectoryGroup #-}
 
 -- | Given an integral amount of seconds and a path, returns a group generating
--- all files in said directory with the proper "st" extension,
--- cached for that amount of seconds. IO errors are "swallowed" by this so
+-- all files in said directory with the proper \"st\" extension,
+-- cached for that amount of seconds. IO errors are \"swallowed\" by this so
 -- that exceptions don't arise in unexpected places.
 -- This violates referential transparency, but can be very useful in developing
 -- templates for any sort of server application.

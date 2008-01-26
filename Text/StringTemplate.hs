@@ -25,18 +25,21 @@
 -- as well as regular templates, including therefore sets of alternating
 -- attributes.
 --
--- Basic instances are provided of the StringTemplateShows class.
--- Any type deriving this class can be passed automatically as a StringTemplate
--- attribute. Additional bindings for HAppS Data, JSON, etc. are anticipated.
--- When defining an instance of the StringTemplateShows you may optionally
--- define a stringTemplateFormattedShows method that parses a format string.
+-- Basic instances are provided of the StringTemplateShows and ToSElem class.
+-- Any type deriving ToSElem can be passed automatically as a StringTemplate
+-- attribute. This package can be installed with syb-with-class bindings
+-- that provide a ToSElem instance for anything deriving
+-- 'Data.Generics.SYB.WithClass.Basics.Data'. When defining an instance of
+-- ToSElem that can take a format parameter, you should first define an
+-- instance of StringTemplateShows, and then define an instance of ToSElem
+-- where @ toSElem = stShowsToSE@.
 -----------------------------------------------------------------------------
 
 module Text.StringTemplate (
   -- * Types
   StringTemplate, STGroup,
   -- * Classes
-  StringTemplateShows(..), ToSElem(..), stShowsToSE, Stringable(..),
+  ToSElem(..), StringTemplateShows(..), stShowsToSE, Stringable(..),
   -- * Creation
   newSTMP, newAngleSTMP, getStringTemplate,
   -- * Display

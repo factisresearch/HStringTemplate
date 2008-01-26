@@ -31,7 +31,7 @@ genericToSElem x
              [] -> LI (STR (dataTypeName (dataTypeOf toSElemProxy x)) :
                            (gmapQ toSElemProxy (toSElemD dict) x))
              fs -> SM (M.fromList (zip fs (gmapQ toSElemProxy (toSElemD dict) x)))
-       | True = 
+       | True =
                error ("Unable to serialize the primitive type '" ++
                       dataTypeName (dataTypeOf toSElemProxy x) ++ "'")
 
