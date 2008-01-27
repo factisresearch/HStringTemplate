@@ -1,18 +1,15 @@
 {-# OPTIONS_GHC -XFlexibleInstances -XOverlappingInstances -XFlexibleContexts -XUndecidableInstances -XRank2Types #-}
 --------------------------------------------------------------------
 -- | Generic Instance for ToSElem using syb-with-class.
---   Inspired heavily-to-entirely by Alex Drummond's work with JSON.
+--   Inspired heavily-to-entirely by Alex Drummond's rJSON.
 --------------------------------------------------------------------}
 
-module Text.StringTemplate.Generic where
-import Text.StringTemplate.Classes
-import Text.StringTemplate.Instances
-
+module Text.StringTemplate.GenericWithClass where
 import qualified Data.Map as M
-import Data.Maybe
-import Numeric
+import Text.StringTemplate.Classes
 import Data.Generics.SYB.WithClass.Basics
 
+stripInitialUnderscores :: [Char] -> [Char]
 stripInitialUnderscores ('_':s) = stripInitialUnderscores s
 stripInitialUnderscores s       = s
 

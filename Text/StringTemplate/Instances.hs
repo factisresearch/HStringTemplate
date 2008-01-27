@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -XFlexibleInstances #-}
+{-# OPTIONS_GHC -XFlexibleInstances -XOverlappingInstances #-}
 {-# OPTIONS_HADDOCK not-home #-}
 
 module Text.StringTemplate.Instances where
@@ -9,14 +9,17 @@ import Numeric
 import Data.Ratio
 import Data.Array
 import Data.Maybe
+import qualified Data.Foldable as F
+import qualified System.Time as OldTime
+import System.Locale
+import Data.Time
 
 {--------------------------------------------------------------------
   Additional instances for items that may be set as StringTemplate
   attributes. The code should provide examples of how to proceed.
 --------------------------------------------------------------------}
---Todo: provide instances of StringTemplateShows for dates
---      and other common cases.
 
+--Basics
 instance ToSElem Char where
     toSElem = STR . (:[])
     toSElemList = STR
@@ -25,23 +28,32 @@ instance ToSElem Bool where
     toSElem True = STR ""
     toSElem _ = SNull
 
-instance (ToSElem a) => ToSElem [a] where
-    toSElem = toSElemList
+instance (ToSElem a) => ToSElem (Maybe a) where
+    toSElem (Just x) = toSElem x
+    toSElem _ = SNull
 
 instance (ToSElem a) => ToSElem (M.Map String a) where
     toSElem = SM . fmap toSElem
 
+instance (ToSElem a) => ToSElem [a] where
+    toSElem = toSElemList
+
+instance (ToSElem a, Ix i) => ToSElem (Array i a) where
+   toSElem a = toSElem (elems a)
+
+instance (ToSElem a, F.Foldable t) => ToSElem (t a) where
+    toSElem = toSElemList . F.toList
+
+--Numbers
 instance StringTemplateShows Float where
     stringTemplateShow = flip showFloat ""
     stringTemplateFormattedShow = flip flip [] . showGFloat . fmap fst . listToMaybe . reads
-
 instance ToSElem Float where
     toSElem = stShowsToSE
 
 instance StringTemplateShows Double where
     stringTemplateShow = flip showFloat ""
     stringTemplateFormattedShow = flip flip [] . showGFloat . fmap fst . listToMaybe . reads
-
 instance ToSElem Double where
     toSElem = stShowsToSE
 
@@ -54,9 +66,56 @@ instance ToSElem Integer where
 instance Integral a => ToSElem (Ratio a) where
     toSElem = STR . show
 
-instance (ToSElem a, Ix i) => ToSElem (Array i a) where
-   toSElem a = toSElem (elems a)
+--Dates and Times
+instance StringTemplateShows OldTime.CalendarTime where
+    stringTemplateShow = OldTime.calendarTimeToString
+    stringTemplateFormattedShow = OldTime.formatCalendarTime defaultTimeLocale
+instance ToSElem OldTime.CalendarTime where
+    toSElem = stShowsToSE
 
+instance StringTemplateShows OldTime.TimeDiff where
+    stringTemplateShow = OldTime.timeDiffToString
+    stringTemplateFormattedShow = OldTime.formatTimeDiff defaultTimeLocale
+instance ToSElem OldTime.TimeDiff where
+    toSElem = stShowsToSE
+
+instance StringTemplateShows Day where
+    stringTemplateShow = show
+    stringTemplateFormattedShow = formatTime defaultTimeLocale    
+instance ToSElem Day where
+    toSElem = stShowsToSE
+
+instance StringTemplateShows LocalTime where
+    stringTemplateShow = show
+    stringTemplateFormattedShow = formatTime defaultTimeLocale    
+instance ToSElem LocalTime where
+    toSElem = stShowsToSE
+
+instance StringTemplateShows TimeOfDay where
+    stringTemplateShow = show
+    stringTemplateFormattedShow = formatTime defaultTimeLocale    
+instance ToSElem TimeOfDay where
+    toSElem = stShowsToSE
+
+instance StringTemplateShows UTCTime where
+    stringTemplateShow = show
+    stringTemplateFormattedShow = formatTime defaultTimeLocale    
+instance ToSElem UTCTime where
+    toSElem = stShowsToSE
+
+instance StringTemplateShows TimeZone where
+    stringTemplateShow = show
+    stringTemplateFormattedShow = formatTime defaultTimeLocale    
+instance ToSElem TimeZone where
+    toSElem = stShowsToSE
+
+instance StringTemplateShows ZonedTime where
+    stringTemplateShow = show
+    stringTemplateFormattedShow = formatTime defaultTimeLocale    
+instance ToSElem ZonedTime where
+    toSElem = stShowsToSE
+
+--Tuples
 instance (ToSElem a, ToSElem b) => ToSElem (a, b) where
    toSElem (a,b) = LI [toSElem a, toSElem b]
 instance (ToSElem a, ToSElem b, ToSElem c) => ToSElem (a, b, c) where

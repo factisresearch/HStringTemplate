@@ -13,10 +13,19 @@ build-Depends:       base
 Cabal-Version:       >= 1.2
 
 flag small-base
+flag syb-with-class
+flag simple-generics
 
 library
+  if flag(syb-with-class)
+    build-depends: syb-with-class
+    exposed-modules: Text.StringTemplate.GenericWithClass
+
+  if flag(simple-generics)
+    exposed-modules: Text.StringTemplate.GenericStandard
+
   if flag(small-base)
-    build-depends:     base >= 3, filepath, parsec, containers, pretty, old-time, bytestring, directory, array
+    build-depends:     base >= 3, filepath, parsec, containers, pretty, time, old-time, old-locale, bytestring, directory, array
   else
     build-depends:     base < 3, filepath, parsec
   exposed-modules:   Text.StringTemplate
