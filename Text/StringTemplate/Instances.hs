@@ -1,4 +1,5 @@
-{-# OPTIONS_GHC -XFlexibleInstances -XOverlappingInstances #-}
+{-# LANGUAGE FlexibleInstances, OverlappingInstances #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_HADDOCK not-home #-}
 
 module Text.StringTemplate.Instances where
@@ -39,7 +40,7 @@ instance (ToSElem a) => ToSElem [a] where
     toSElem = toSElemList
 
 instance (ToSElem a, Ix i) => ToSElem (Array i a) where
-   toSElem a = toSElem (elems a)
+   toSElem = toSElem . elems
 
 instance (ToSElem a, F.Foldable t) => ToSElem (t a) where
     toSElem = toSElemList . F.toList

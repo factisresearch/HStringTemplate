@@ -1,7 +1,7 @@
-{-# OPTIONS_GHC -XFlexibleInstances -XOverlappingInstances -XFlexibleContexts -XUndecidableInstances -XRank2Types #-}
+{-# LANGUAGE FlexibleInstances, OverlappingInstances, FlexibleContexts, UndecidableInstances, Rank2Types #-}
 --------------------------------------------------------------------
 -- | Generic Instance for ToSElem using syb-with-class.
---   Inspired heavily-to-entirely by Alex Drummond's rJSON.
+--   Inspired heavily-to-entirely by Alex Drummond's RJson.
 --------------------------------------------------------------------}
 
 module Text.StringTemplate.GenericWithClass() where
