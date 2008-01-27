@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances, OverlappingInstances, UndecidableInstances, Rank2Types, ScopedTypeVariables #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 --------------------------------------------------------------------
 -- | Generic Instance for ToSElem using standard Data.Generic libraries.
 --------------------------------------------------------------------}

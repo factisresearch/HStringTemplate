@@ -59,6 +59,7 @@ class Monoid a => Stringable a where
     -- | Defaults to  @ (mconcat .) . intersperse @
     mintercalate :: a -> [a] -> a
     mintercalate = (mconcat .) . intersperse
+    -- | Defaults to  @ mappend @
     mlabel :: a -> a -> a
     mlabel = mappend
 

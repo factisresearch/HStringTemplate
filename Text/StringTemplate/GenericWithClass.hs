@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances, OverlappingInstances, FlexibleContexts, UndecidableInstances, Rank2Types #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 --------------------------------------------------------------------
 -- | Generic Instance for ToSElem using syb-with-class.
 --   Inspired heavily-to-entirely by Alex Drummond's RJson.
@@ -25,7 +26,7 @@ genericToSElem :: (Data ToSElemD a, ToSElem a, Stringable b) => a -> SElem b
 genericToSElem x
        | isAlgType (dataTypeOf toSElemProxy x) =
            case (map stripInitialUnderscores (getFields x)) of
-             [] -> LI (STR (dataTypeName (dataTypeOf toSElemProxy x)) :
+             [] -> LI (STR (showConstr (toConstr toSElemProxy x)) :
                            (gmapQ toSElemProxy (toSElemD dict) x))
              fs -> SM (M.fromList (zip fs (gmapQ toSElemProxy (toSElemD dict) x)))
        | True =

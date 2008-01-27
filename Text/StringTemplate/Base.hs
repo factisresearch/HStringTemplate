@@ -25,7 +25,7 @@ import Text.StringTemplate.Instances()
   Generic Utilities
 --------------------------------------------------------------------}
 
-instance Applicative (GenParser tok st) where pure = return; (<*>) = ap;
+--instance Applicative (GenParser tok st) where pure = return; (<*>) = ap;
 
 o :: (b -> c) -> (a -> a1 -> b) -> a -> a1 -> c
 o = (.).(.)
@@ -272,8 +272,8 @@ ifIsSet t e n SNull = if n then e else t
 ifIsSet t e n _ = if n then t else e
 
 parseif :: Stringable a => Char -> GenParser Char (Char, Char) (Bool, SEnv a -> SElem a, [SEnv a -> SElem a], Char, SEnv a -> a, SEnv a -> a)
-parseif cb = (,,,,,) <$> option True (char '!' >> return False) <*> subexprn
-             <*> props <*> char ')' .>> char cb <*> stmpl True <*>
+parseif cb = (,,,,,) `fmap` option True (char '!' >> return False) `ap` subexprn
+             `ap` props `ap` (char ')' >> char cb) `ap` stmpl True `ap`
              (try elseifstat <|> try elsestat <|> endifstat)
 
 stat ::Stringable a => GenParser Char (Char, Char) (SEnv a -> a)
