@@ -3,7 +3,7 @@
 -- | Generic Instance for ToSElem using standard Data.Generic libraries.
 --------------------------------------------------------------------}
 
-module Text.StringTemplate.GenericStandard where
+module Text.StringTemplate.GenericStandard() where
 import qualified Data.Map as M
 import Text.StringTemplate.Classes
 import Text.StringTemplate.Instances()

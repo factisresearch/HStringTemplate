@@ -1,0 +1,16 @@
+Module      :  Text.StringTemplate.Base
+Copyright   :  (c) Sterling Clover 2008
+License     :  BSD 3 Clause
+Maintainer  :  s.clover@gmail.com
+Stability   :  experimental
+Portability :  portable
+
+A StringTemplate is a String with "holes" in it. This is a port of the Java StringTemplate library written by Terrence Parr. (<http://www.stringtemplate.org>).
+
+This library implements the basic 3.1 grammar, lacking group files (though not groups themselves), Regions, and Interfaces. The goal is not to blindly copy the StringTemplate API, but rather to take its central ideas and implement them in a Haskellish manner. Indentation and wrapping, for example, are implemented through the HughesPJ Pretty Printing library. Calling toPPDoc on a StringTemplate yields a Doc with appropriate paragraph-fill wrapping that can be rendered in the usual fashion.
+
+This library extends the current StringTemplate grammar by allowing the application of alternating attributes to anonymous as well as regular templates, including therefore sets of alternating attributes.
+
+Basic instances are provided of the StringTemplateShows and ToSElem class. Any type deriving ToSElem can be passed automatically as a StringTemplate attribute. This package can be installed with syb-with-class bindings that provide a ToSElem instance for anything deriving 'Data.Generics.SYB.WithClass.Basics.Data'. When defining an instance of ToSElem that can take a format parameter, you should first define an instance of StringTemplateShows, and then define an instance of ToSElem where @ toSElem = stShowsToSE@.
+
+Along with the haddocks, additional documentation and commentary is at http://fmapfixreturn.wordpress.com

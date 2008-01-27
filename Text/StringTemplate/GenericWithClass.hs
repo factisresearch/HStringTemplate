@@ -4,7 +4,7 @@
 --   Inspired heavily-to-entirely by Alex Drummond's rJSON.
 --------------------------------------------------------------------}
 
-module Text.StringTemplate.GenericWithClass where
+module Text.StringTemplate.GenericWithClass() where
 import qualified Data.Map as M
 import Text.StringTemplate.Classes
 import Data.Generics.SYB.WithClass.Basics

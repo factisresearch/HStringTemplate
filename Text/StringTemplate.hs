@@ -11,7 +11,7 @@
 -- This is a port of the Java StringTemplate library written by Terrence Parr.
 -- (<http://www.stringtemplate.org>).
 --
--- This library implements the basic 3.0 grammar, lacking group files
+-- This library implements the basic 3.1 grammar, lacking group files
 -- (though not groups themselves), Regions, and Interfaces.
 -- The goal is not to blindly copy the StringTemplate API, but rather to
 -- take its central ideas and implement them in a Haskellish manner.
