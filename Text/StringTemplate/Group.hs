@@ -2,7 +2,8 @@
 
 module Text.StringTemplate.Group
     (groupStringTemplates, addSuperGroup, addSubGroup, setEncoderGroup,
-     mergeSTGroups, directoryGroup, optInsertGroup, unsafeVolatileDirectoryGroup
+     mergeSTGroups, directoryGroup, optInsertGroup,
+     directoryGroupLazy, unsafeVolatileDirectoryGroup
     ) where
 import Control.Applicative hiding ((<|>),many)
 import Control.Arrow
@@ -52,8 +53,21 @@ directoryGroup :: (Stringable a) => FilePath -> IO (STGroup a)
 directoryGroup path = groupStringTemplates <$>
                       (fmap <$> zip . (map dropExtension)
                        <*> mapM (newSTMP <$$> readFile)
-                           =<< filter (("st" ==) . takeExtension)
+                           =<< filter ((".st" ==) . takeExtension)
                        <$> getDirectoryContents path)
+
+-- | Given a path, returns a group which generates all files in said directory
+-- which have the proper \"st\" extension.
+-- This function is lazy in the same way that readFile is lazy, with all
+-- files read on demand, but no more than once. As it performs file IO,
+-- expect it to throw the usual exceptions. And, as it is lazy, expect
+-- these exceptions in unexpected places.
+directoryGroupLazy :: (Stringable a) => FilePath -> IO (STGroup a)
+directoryGroupLazy path = groupStringTemplates <$>
+                          (fmap <$> zip . (map dropExtension)
+                           <*> mapM (unsafeInterleaveIO . (newSTMP <$$> readFile))
+                               =<< filter ((".st" ==) . takeExtension)
+                           <$> getDirectoryContents path)
 
 -- | Adds a supergroup to any StringTemplate group such that templates from
 -- the original group are now able to call ones from the supergroup as well.

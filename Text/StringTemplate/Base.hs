@@ -25,8 +25,6 @@ import Text.StringTemplate.Instances()
   Generic Utilities
 --------------------------------------------------------------------}
 
---instance Applicative (GenParser tok st) where pure = return; (<*>) = ap;
-
 o :: (b -> c) -> (a -> a1 -> b) -> a -> a1 -> c
 o = (.).(.)
 infixr 8 `o`

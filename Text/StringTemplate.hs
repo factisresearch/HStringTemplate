@@ -50,7 +50,8 @@ module Text.StringTemplate (
   setEncoder, setEncoderGroup,
   -- * Groups
   groupStringTemplates, addSuperGroup, addSubGroup,
-  mergeSTGroups, directoryGroup, unsafeVolatileDirectoryGroup
+  mergeSTGroups, directoryGroup, unsafeVolatileDirectoryGroup,
+  directoryGroupLazy
   ) where
 import Text.StringTemplate.Base
 import Text.StringTemplate.Group
