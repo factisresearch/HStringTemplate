@@ -25,9 +25,9 @@ import Text.StringTemplate.Instances()
   Generic Utilities
 --------------------------------------------------------------------}
 
-o :: (b -> c) -> (a -> a1 -> b) -> a -> a1 -> c
-o = (.).(.)
-infixr 8 `o`
+(<$$>) :: (Functor f1, Functor f) => (a -> b) -> f (f1 a) -> f (f1 b)
+(<$$>) x y = ((<$>) . (<$>)) x y
+infixr 8 <$$>
 
 (|.) :: (t1 -> t2) -> (t -> t1) -> t -> t2
 (|.) f g x = f (g x)
@@ -185,7 +185,7 @@ stshow :: STShow -> String
 stshow (STShow a) = stringTemplateShow a
 stfshow :: Stringable a => SEnv a -> (SEnv a -> SElem a) -> STShow -> String
 stfshow snv fs (STShow a) = stringTemplateFormattedShow
-                            (stToString `o` showVal <*> fs $ snv) a
+                            (stToString <$$> showVal <*> fs $ snv) a
 
 around :: Char -> GenParser Char st t -> Char -> GenParser Char st t
 around x p y = do {char x; v<-p; char y; return v}
@@ -225,7 +225,7 @@ subStmp = do
   st <- mconcat <$> many (showStr <$> escapedStr (ca:"}|")
                          <|> try (around ca optExpr cb)
                          <|> try comment <|> blank  <?> "subtemplate")
-  return (st `o` udEnv)
+  return (st <$$> udEnv)
       where transform an (att,is) =
                 flip (foldr envInsert) $ zip ("i":"i0":an) (is++att)
             attribNames = (char '|' >>) . return =<< comlist (spaced word)
@@ -261,7 +261,7 @@ optExpr = do
 
 getProp :: Stringable a => [SEnv a -> SElem a] -> SElem a -> SEnv a -> SElem a
 getProp (p:ps) (SM mp) = maybe SNull . flip (getProp ps) <*>
-                          flip M.lookup mp . ap (stToString `o` showVal) p
+                          flip M.lookup mp . ap (stToString <$$> showVal) p
 getProp (_:_) _ = const SNull
 getProp _ se = const se
 
@@ -318,9 +318,9 @@ seqTmpls  _ _     = const (stFromString "")
 subexprn :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem a)
 subexprn = cct <$> spaced
             (braceConcat
-             <|> SBLE `o` ($ ([SNull],ix0)) <$> try regTemplate
+             <|> SBLE <$$> ($ ([SNull],ix0)) <$> try regTemplate
              <|> attrib
-             <|> SBLE `o` ($ ([SNull],ix0)) <$> anonTmpl
+             <|> SBLE <$$> ($ ([SNull],ix0)) <$> anonTmpl
              <?> "expression")
            `sepBy1` spaced (char '+')
     where cct xs@(_:_:_) = SBLE |.
@@ -329,7 +329,7 @@ subexprn = cct <$> spaced
           cct  _  = const SNull
 
 braceConcat :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem a)
-braceConcat = LI . foldr go [] `o` sequence <$> around '['(comlist subexprn)']'
+braceConcat = LI . foldr go [] <$$> sequence <$> around '['(comlist subexprn)']'
     where go (LI x) lst = x++lst; go x lst = x:lst
 
 
@@ -382,7 +382,7 @@ pluslen xs = zip (map (:[]) xs) $ mkIndex [0..(length xs)]
 liTrans :: [SElem a] -> [([SElem a], [SElem a])]
 liTrans = pluslen' . paddedTrans SNull . map u
     where u (LI x) = x; u x = [x]
-          pluslen' xs = zip xs $ mkIndex [0..(length (head xs))]
+          pluslen' xs = zip xs $ mkIndex [0..(length xs)]
 
 iterApp :: Stringable a => [([SElem a], [SElem a]) -> SEnv a -> a] -> [SElem a] -> SEnv a -> a
 iterApp [f] (LI xs:[]) = (mconcatMap $ pluslen xs) . flip f
@@ -398,7 +398,7 @@ anonTmpl = around '{' subStmp '}'
 regTemplate :: Stringable a => GenParser Char (Char, Char) (([SElem a], [SElem a]) -> SEnv a -> a)
 regTemplate = do
   try (functn::GenParser Char (Char,Char) (SEnv String -> SElem String)) .>> fail "" <|> return ()
-  name <- justSTR <$> many1 (alphaNum <|> char '.' <|> char '/')
+  name <- justSTR <$> many1 (alphaNum <|> char '/')
           <|> around '(' subexprn ')'
   vals <- around '(' (spaced $ try assgn <|> anonassgn <|> return []) ')'
   return $ join . (. name) . makeTmpl vals

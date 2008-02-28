@@ -53,7 +53,7 @@ directoryGroup :: (Stringable a) => FilePath -> IO (STGroup a)
 directoryGroup path = groupStringTemplates <$>
                       (fmap <$> zip . (map dropExtension)
                        <*> mapM (newSTMP <$$> readFile)
-                           =<< filter ((".st" ==) . takeExtension)
+                           =<< map (path </>) . filter ((".st" ==) . takeExtension)
                        <$> getDirectoryContents path)
 
 -- | Given a path, returns a group which generates all files in said directory
@@ -66,7 +66,7 @@ directoryGroupLazy :: (Stringable a) => FilePath -> IO (STGroup a)
 directoryGroupLazy path = groupStringTemplates <$>
                           (fmap <$> zip . (map dropExtension)
                            <*> mapM (unsafeInterleaveIO . (newSTMP <$$> readFile))
-                               =<< filter ((".st" ==) . takeExtension)
+                               =<< map (path </>) . filter ((".st" ==) . takeExtension)
                            <$> getDirectoryContents path)
 
 -- | Adds a supergroup to any StringTemplate group such that templates from
@@ -93,7 +93,6 @@ optInsertGroup opts f = optInsertTmpl opts <$$> f
 setEncoderGroup :: (Stringable a) => (String -> String) ->  STGroup a -> STGroup a
 setEncoderGroup x f = setEncoder x <$$> f
 
-{-# NOINLINE unsafeVolatileDirectoryGroup #-}
 
 -- | Given an integral amount of seconds and a path, returns a group generating
 -- all files in said directory with the proper \"st\" extension,
@@ -107,7 +106,7 @@ unsafeVolatileDirectoryGroup path i = return (cacheSTGroup i stfg)
     where stfg = StFirst . Just . STMP (SEnv M.empty [] stfg id)
                  . parseSTMP ('$', '$') . unsafePerformIO . flip catch
                        (return . ("IO Error: " ++) . ioeGetErrorString)
-                 . readFile . (path </>)
+                 . readFile . (path </>) . (++".st")
           cacheSTGroup :: Int -> STGroup a -> STGroup a
           cacheSTGroup m g = unsafePerformIO $ go <$> newIORef M.empty
               where go r s = unsafePerformIO $ do
