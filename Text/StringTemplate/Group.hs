@@ -32,7 +32,6 @@ sgInsert   g st = let e = senv st in st {senv = e {sgen = sgen e `mappend` g} }
 sgOverride :: STGroup a -> StringTemplate a -> StringTemplate a
 sgOverride g st = let e = senv st in st {senv = e {sgen = g `mappend` sgen e} }
 
-
 {--------------------------------------------------------------------
   Group API
 --------------------------------------------------------------------}
@@ -42,8 +41,7 @@ sgOverride g st = let e = senv st in st {senv = e {sgen = g `mappend` sgen e} }
 groupStringTemplates :: [(String,StringTemplate a)] -> STGroup a
 groupStringTemplates xs = newGen
     where newGen s = StFirst (M.lookup s ng)
-          ng = foldl' (flip $ uncurry M.insert) M.empty $
-               map (second $ sgInsert newGen) xs
+          ng = M.fromList $ map (second $ sgInsert newGen) xs
 
 -- | Given a path, returns a group which generates all files in said directory
 -- which have the proper \"st\" extension.
@@ -52,8 +50,8 @@ groupStringTemplates xs = newGen
 directoryGroup :: (Stringable a) => FilePath -> IO (STGroup a)
 directoryGroup path = groupStringTemplates <$>
                       (fmap <$> zip . (map dropExtension)
-                       <*> mapM (newSTMP <$$> readFile)
-                           =<< map (path </>) . filter ((".st" ==) . takeExtension)
+                       <*> mapM (newSTMP <$$> (readFile . (path </>)))
+                           =<< filter ((".st" ==) . takeExtension)
                        <$> getDirectoryContents path)
 
 -- | Given a path, returns a group which generates all files in said directory
@@ -65,8 +63,9 @@ directoryGroup path = groupStringTemplates <$>
 directoryGroupLazy :: (Stringable a) => FilePath -> IO (STGroup a)
 directoryGroupLazy path = groupStringTemplates <$>
                           (fmap <$> zip . (map dropExtension)
-                           <*> mapM (unsafeInterleaveIO . (newSTMP <$$> readFile))
-                               =<< map (path </>) . filter ((".st" ==) . takeExtension)
+                           <*> mapM (unsafeInterleaveIO .
+                                     (newSTMP <$$> (readFile . (path </>))))
+                               =<< filter ((".st" ==) . takeExtension)
                            <$> getDirectoryContents path)
 
 -- | Adds a supergroup to any StringTemplate group such that templates from
@@ -92,7 +91,6 @@ optInsertGroup opts f = optInsertTmpl opts <$$> f
 -- rendered with in each enclosed template
 setEncoderGroup :: (Stringable a) => (String -> String) ->  STGroup a -> STGroup a
 setEncoderGroup x f = setEncoder x <$$> f
-
 
 -- | Given an integral amount of seconds and a path, returns a group generating
 -- all files in said directory with the proper \"st\" extension,

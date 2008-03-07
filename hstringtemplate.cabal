@@ -29,8 +29,8 @@ library
   else
     build-depends:     base < 3, filepath, parsec
   exposed-modules:   Text.StringTemplate
-  other-modules:     Text.StringTemplate.Instances
-                     Text.StringTemplate.Group
                      Text.StringTemplate.Base
                      Text.StringTemplate.Classes
+  other-modules:     Text.StringTemplate.Instances
+                     Text.StringTemplate.Group
   ghc-options:       -Wall
