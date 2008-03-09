@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}
-module Text.StringTemplate.Renderf (renderf, (|=)) where
+module Text.StringTemplate.Renderf ((|=), SEType(..)) where
 import Text.StringTemplate.Base
 
 class Stringable b => SEType b a where
