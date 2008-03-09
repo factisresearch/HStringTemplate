@@ -43,16 +43,17 @@ module Text.StringTemplate (
   -- * Creation
   newSTMP, newAngleSTMP, getStringTemplate,
   -- * Display
-  toString, toPPDoc, render,
+  toString, toPPDoc, render, renderf, dumpAttribs,
   -- * Modification
-  setAttribute, setManyAttrib, withContext,
+  setAttribute, (|=), setManyAttrib, withContext,
   optInsertTmpl, optInsertGroup,
   setEncoder, setEncoderGroup,
   -- * Groups
   groupStringTemplates, addSuperGroup, addSubGroup,
   mergeSTGroups, directoryGroup, unsafeVolatileDirectoryGroup,
-  directoryGroupLazy
+  directoryGroupLazy, nullGroup
   ) where
 import Text.StringTemplate.Base
 import Text.StringTemplate.Group
+import Text.StringTemplate.Renderf
 import Text.StringTemplate.Instances()

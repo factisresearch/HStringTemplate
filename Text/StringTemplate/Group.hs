@@ -3,7 +3,7 @@
 module Text.StringTemplate.Group
     (groupStringTemplates, addSuperGroup, addSubGroup, setEncoderGroup,
      mergeSTGroups, directoryGroup, optInsertGroup,
-     directoryGroupLazy, unsafeVolatileDirectoryGroup
+     directoryGroupLazy, unsafeVolatileDirectoryGroup, nullGroup
     ) where
 import Control.Applicative hiding ((<|>),many)
 import Control.Arrow
@@ -92,21 +92,30 @@ optInsertGroup opts f = optInsertTmpl opts <$$> f
 setEncoderGroup :: (Stringable a) => (String -> String) ->  STGroup a -> STGroup a
 setEncoderGroup x f = setEncoder x <$$> f
 
+-- | For any requested template, returns a message that the template was
+-- unable to be found. Useful to add as a super group for a set of templates
+-- under development, to aid in debugging.
+nullGroup :: Stringable a => STGroup a
+nullGroup = \x -> StFirst . Just . newSTMP $ "Could not find template: " ++ x
+
 -- | Given an integral amount of seconds and a path, returns a group generating
 -- all files in said directory with the proper \"st\" extension,
 -- cached for that amount of seconds. IO errors are \"swallowed\" by this so
 -- that exceptions don't arise in unexpected places.
 -- This violates referential transparency, but can be very useful in developing
--- templates for any sort of server application.
--- It should be swapped out for production purposes.
+-- templates for any sort of server application. It should be swapped out for
+-- production purposes. The dumpAttribs template is added to the returned group
+-- by default, as it should prove useful for debugging and developing templates.
+-- For the same reason, nullGroup is set as a supergroup.
 unsafeVolatileDirectoryGroup :: Stringable a => String -> Int -> IO (STGroup a)
-unsafeVolatileDirectoryGroup path i = return (cacheSTGroup i stfg)
+unsafeVolatileDirectoryGroup path m = return . flip addSuperGroup extraTmpls $ cacheSTGroup stfg
     where stfg = StFirst . Just . STMP (SEnv M.empty [] stfg id)
                  . parseSTMP ('$', '$') . unsafePerformIO . flip catch
                        (return . ("IO Error: " ++) . ioeGetErrorString)
                  . readFile . (path </>) . (++".st")
-          cacheSTGroup :: Int -> STGroup a -> STGroup a
-          cacheSTGroup m g = unsafePerformIO $ go <$> newIORef M.empty
+          extraTmpls = addSuperGroup (groupStringTemplates [("dumpAttribs", dumpAttribs)]) nullGroup
+          cacheSTGroup :: STGroup a -> STGroup a
+          cacheSTGroup g = unsafePerformIO $ go <$> newIORef M.empty
               where go r s = unsafePerformIO $ do
                                mp <- readIORef r
                                now <- getClockTime

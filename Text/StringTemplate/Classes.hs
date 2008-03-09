@@ -8,6 +8,7 @@ import qualified Data.Map as M
 import Data.List
 import Data.Monoid
 import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString.Lazy.Char8 as LB
 import qualified Text.PrettyPrint.HughesPJ as PP
 
 newtype StFirst a = StFirst { stGetFirst :: Maybe a }
@@ -59,9 +60,9 @@ class Monoid a => Stringable a where
     -- | Defaults to  @ (mconcat .) . intersperse @
     mintercalate :: a -> [a] -> a
     mintercalate = (mconcat .) . intersperse
-    -- | Defaults to  @ mappend @
+    -- | Defaults to  @  mlabel x y = mconcat [x, stFromString "[", y, stFromString "]"] @
     mlabel :: a -> a -> a
-    mlabel = mappend
+    mlabel x y = mconcat [x, stFromString "[", y, stFromString "]"]
 
 instance Stringable [Char] where
     stFromString = id
@@ -81,6 +82,10 @@ instance Monoid PP.Doc where
 instance Stringable B.ByteString where
     stFromString = B.pack
     stToString = B.unpack
+
+instance Stringable LB.ByteString where
+    stFromString = LB.pack
+    stToString = LB.unpack
 
 instance Stringable (Endo String) where
     stFromString = Endo . (++)

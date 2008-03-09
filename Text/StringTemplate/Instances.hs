@@ -82,37 +82,37 @@ instance ToSElem OldTime.TimeDiff where
 
 instance StringTemplateShows Day where
     stringTemplateShow = show
-    stringTemplateFormattedShow = formatTime defaultTimeLocale    
+    stringTemplateFormattedShow = formatTime defaultTimeLocale
 instance ToSElem Day where
     toSElem = stShowsToSE
 
 instance StringTemplateShows LocalTime where
     stringTemplateShow = show
-    stringTemplateFormattedShow = formatTime defaultTimeLocale    
+    stringTemplateFormattedShow = formatTime defaultTimeLocale
 instance ToSElem LocalTime where
     toSElem = stShowsToSE
 
 instance StringTemplateShows TimeOfDay where
     stringTemplateShow = show
-    stringTemplateFormattedShow = formatTime defaultTimeLocale    
+    stringTemplateFormattedShow = formatTime defaultTimeLocale
 instance ToSElem TimeOfDay where
     toSElem = stShowsToSE
 
 instance StringTemplateShows UTCTime where
     stringTemplateShow = show
-    stringTemplateFormattedShow = formatTime defaultTimeLocale    
+    stringTemplateFormattedShow = formatTime defaultTimeLocale
 instance ToSElem UTCTime where
     toSElem = stShowsToSE
 
 instance StringTemplateShows TimeZone where
     stringTemplateShow = show
-    stringTemplateFormattedShow = formatTime defaultTimeLocale    
+    stringTemplateFormattedShow = formatTime defaultTimeLocale
 instance ToSElem TimeZone where
     toSElem = stShowsToSE
 
 instance StringTemplateShows ZonedTime where
     stringTemplateShow = show
-    stringTemplateFormattedShow = formatTime defaultTimeLocale    
+    stringTemplateFormattedShow = formatTime defaultTimeLocale
 instance ToSElem ZonedTime where
     toSElem = stShowsToSE
 

@@ -5,7 +5,7 @@ module Text.StringTemplate.Base
      Stringable(..), stShowsToSE,
      toString, toPPDoc, render, newSTMP, newAngleSTMP, getStringTemplate,
      setAttribute, setManyAttrib, withContext, optInsertTmpl, setEncoder,
-     paddedTrans, SEnv(..), parseSTMP
+     paddedTrans, SEnv(..), parseSTMP, dumpAttribs
     ) where
 import Control.Monad
 import Control.Arrow hiding (pure)
@@ -18,7 +18,6 @@ import qualified Data.Map as M
 import qualified Text.PrettyPrint.HughesPJ as PP
 
 import Text.StringTemplate.Classes
---import Debug.Trace --DEBUG
 import Text.StringTemplate.Instances()
 
 {--------------------------------------------------------------------
@@ -123,6 +122,12 @@ optInsertTmpl x st = st {senv = optInsert (map (second justSTR) x) (senv st)}
 -- rendered with. For example one useful encoder would be 'Text.Html.stringToHtmlString'. All attributes will be encoded once and only once.
 setEncoder :: (Stringable a) => (String -> String) -> StringTemplate a -> StringTemplate a
 setEncoder x st = st {senv = (senv st) {senc = x} }
+
+-- | A special template that simply dumps the values of all the attributes set in it.
+-- This may be made available to any template as a function by adding it to its group.
+-- I.e. @ myNewGroup = addSuperGroup myGroup $ groupStringTemplates [("dumpAttribs", dumpAttribs)] @
+dumpAttribs :: Stringable a => StringTemplate a
+dumpAttribs = STMP (SEnv M.empty [] mempty id) $ \env -> showVal env (SM $ smp env)
 
 {--------------------------------------------------------------------
   Internal API
