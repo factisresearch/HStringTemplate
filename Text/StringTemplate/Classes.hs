@@ -38,7 +38,7 @@ class (Show a) => StringTemplateShows a where
     -- | Defaults to 'show'.
     stringTemplateShow :: a -> String
     stringTemplateShow = show
-    -- | Defaults to  @ flip $ const . stringTemplateShow @
+    -- | Defaults to  @ \ _ a -> stringTemplateShow a @
     stringTemplateFormattedShow :: String -> a -> String
     stringTemplateFormattedShow = flip $ const . stringTemplateShow
 

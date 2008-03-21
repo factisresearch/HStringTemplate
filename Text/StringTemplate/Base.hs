@@ -3,7 +3,8 @@
 module Text.StringTemplate.Base
     (StringTemplate(..), StringTemplateShows(..), ToSElem(..), STGroup,
      Stringable(..), stShowsToSE,
-     toString, toPPDoc, render, newSTMP, newAngleSTMP, getStringTemplate,
+     toString, toPPDoc, render, newSTMP, newAngleSTMP,
+     getStringTemplate, getStringTemplate',
      setAttribute, setManyAttrib, withContext, optInsertTmpl, setEncoder,
      paddedTrans, SEnv(..), parseSTMP, dumpAttribs
     ) where
@@ -113,6 +114,12 @@ withContext st x = case toSElem x of
 -- StringTemplate if it exists, otherwise, Nothing.
 getStringTemplate :: (Stringable a) => String -> STGroup a -> Maybe (StringTemplate a)
 getStringTemplate s sg = stGetFirst (sg s)
+
+-- | As with 'getStringTemplate' but never inlined, so appropriate for use
+-- with volatile template groups.
+{-# NOINLINE getStringTemplate' #-}
+getStringTemplate' :: (Stringable a) => String -> STGroup a -> Maybe (StringTemplate a)
+getStringTemplate' s sg = stGetFirst (sg s)
 
 -- | Adds a set of global options to a single template
 optInsertTmpl :: [(String, String)] -> StringTemplate a -> StringTemplate a
@@ -403,7 +410,7 @@ anonTmpl = around '{' subStmp '}'
 regTemplate :: Stringable a => GenParser Char (Char, Char) (([SElem a], [SElem a]) -> SEnv a -> a)
 regTemplate = do
   try (functn::GenParser Char (Char,Char) (SEnv String -> SElem String)) .>> fail "" <|> return ()
-  name <- justSTR <$> many1 (alphaNum <|> char '/')
+  name <- justSTR <$> many1 (alphaNum <|> char '/'<|> char '_')
           <|> around '(' subexprn ')'
   vals <- around '(' (spaced $ try assgn <|> anonassgn <|> return []) ')'
   return $ join . (. name) . makeTmpl vals

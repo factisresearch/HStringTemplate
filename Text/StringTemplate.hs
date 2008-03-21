@@ -1,6 +1,6 @@
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Text.StringTemplate.Base
+-- Module      :  Text.StringTemplate
 -- Copyright   :  (c) Sterling Clover 2008
 -- License     :  BSD 3 Clause
 -- Maintainer  :  s.clover@gmail.com
@@ -41,7 +41,7 @@ module Text.StringTemplate (
   -- * Classes
   ToSElem(..), StringTemplateShows(..), stShowsToSE, Stringable(..), SEType(..),
   -- * Creation
-  newSTMP, newAngleSTMP, getStringTemplate,
+  newSTMP, newAngleSTMP, getStringTemplate, getStringTemplate',
   -- * Display
   toString, toPPDoc, render, dumpAttribs,
   -- * Modification

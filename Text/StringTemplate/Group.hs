@@ -106,14 +106,13 @@ nullGroup = \x -> StFirst . Just . newSTMP $ "Could not find template: " ++ x
 -- templates for any sort of server application. It should be swapped out for
 -- production purposes. The dumpAttribs template is added to the returned group
 -- by default, as it should prove useful for debugging and developing templates.
--- For the same reason, nullGroup is set as a supergroup.
 unsafeVolatileDirectoryGroup :: Stringable a => String -> Int -> IO (STGroup a)
-unsafeVolatileDirectoryGroup path m = return . flip addSuperGroup extraTmpls $ cacheSTGroup stfg
+unsafeVolatileDirectoryGroup path m = return . flip addSubGroup extraTmpls $ cacheSTGroup stfg
     where stfg = StFirst . Just . STMP (SEnv M.empty [] stfg id)
                  . parseSTMP ('$', '$') . unsafePerformIO . flip catch
-                       (return . ("IO Error: " ++) . ioeGetErrorString)
+                       (return . (\e -> "IO Error: " ++ show (ioeGetFileName e) ++ " -- " ++ ioeGetErrorString e))
                  . readFile . (path </>) . (++".st")
-          extraTmpls = addSuperGroup (groupStringTemplates [("dumpAttribs", dumpAttribs)]) nullGroup
+          extraTmpls = addSubGroup (groupStringTemplates [("dumpAttribs", dumpAttribs)]) nullGroup
           cacheSTGroup :: STGroup a -> STGroup a
           cacheSTGroup g = unsafePerformIO $ go <$> newIORef M.empty
               where go r s = unsafePerformIO $ do
