@@ -161,7 +161,12 @@ nullOpt = fromMaybe (justSTR "") =<< optLookup "null"
 
 stLookup :: (Stringable a) => [Char] -> SEnv a -> StringTemplate a
 stLookup x env = maybe (newSTMP ("No Template Found for: " ++ x))
-                 (\st-> st {senv = env}) $ stGetFirst (sgen env x)
+                 (\st-> st {senv = mergeSEnvs env (senv st)}) $ stGetFirst (sgen env x)
+
+--merges values of former into latter, preserving encoder
+--of latter, as well as non-overriden options. group of latter is overridden.
+mergeSEnvs :: SEnv a -> SEnv a -> SEnv a
+mergeSEnvs x y = SEnv {smp = M.union (smp x) (smp y), sopts = (sopts y ++ sopts x), sgen = sgen x, senc = senc y}
 
 parseSTMP :: (Stringable a) => (Char, Char) -> String -> SEnv a -> a
 parseSTMP x = either (showStr .  show) (id) . runParser (stmpl False) x ""
