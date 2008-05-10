@@ -116,12 +116,24 @@ instance StringTemplateShows ZonedTime where
 instance ToSElem ZonedTime where
     toSElem = stShowsToSE
 
---Tuples
+t2map :: [SElem a] -> SElem a
+t2map = SM . M.fromList . zip (map show [(0::Int)..])
+
 instance (ToSElem a, ToSElem b) => ToSElem (a, b) where
-   toSElem (a,b) = LI [toSElem a, toSElem b]
+   toSElem (a,b) = t2map [toSElem a, toSElem b]
 instance (ToSElem a, ToSElem b, ToSElem c) => ToSElem (a, b, c) where
-   toSElem (a,b,c) = LI [toSElem a, toSElem b, toSElem c]
+   toSElem (a,b,c) = t2map [toSElem a, toSElem b, toSElem c]
 instance (ToSElem a, ToSElem b, ToSElem c, ToSElem d) => ToSElem (a, b, c, d) where
-   toSElem (a,b,c,d) = LI [toSElem a, toSElem b, toSElem c, toSElem d]
+   toSElem (a,b,c,d) = t2map [toSElem a, toSElem b, toSElem c, toSElem d]
 instance (ToSElem a, ToSElem b, ToSElem c, ToSElem d, ToSElem e) => ToSElem (a, b, c, d, e) where
-   toSElem (a,b,c,d,e) = LI [toSElem a, toSElem b, toSElem c, toSElem d, toSElem e]
+   toSElem (a,b,c,d,e) = t2map [toSElem a, toSElem b, toSElem c, toSElem d, toSElem e]
+instance (ToSElem a, ToSElem b, ToSElem c, ToSElem d, ToSElem e, ToSElem f) => ToSElem (a, b, c, d, e, f) where
+   toSElem (a,b,c,d,e, f) = t2map [toSElem a, toSElem b, toSElem c, toSElem d, toSElem e, toSElem f]
+instance (ToSElem a, ToSElem b, ToSElem c, ToSElem d, ToSElem e, ToSElem f, ToSElem g) => ToSElem (a, b, c, d, e, f, g) where
+   toSElem (a,b,c,d,e,f,g) = t2map [toSElem a, toSElem b, toSElem c, toSElem d, toSElem e, toSElem f, toSElem g]
+instance (ToSElem a, ToSElem b, ToSElem c, ToSElem d, ToSElem e, ToSElem f, ToSElem g, ToSElem h) => ToSElem (a, b, c, d, e, f, g, h) where
+   toSElem (a,b,c,d,e,f,g,h) = t2map [toSElem a, toSElem b, toSElem c, toSElem d, toSElem e, toSElem f, toSElem g, toSElem h]
+instance (ToSElem a, ToSElem b, ToSElem c, ToSElem d, ToSElem e, ToSElem f, ToSElem g, ToSElem h, ToSElem i) => ToSElem (a, b, c, d, e, f, g, h, i) where
+   toSElem (a,b,c,d,e,f,g,h,i) = t2map [toSElem a, toSElem b, toSElem c, toSElem d, toSElem e, toSElem f, toSElem g, toSElem h, toSElem i]
+instance (ToSElem a, ToSElem b, ToSElem c, ToSElem d, ToSElem e, ToSElem f, ToSElem g, ToSElem h, ToSElem i, ToSElem j) => ToSElem (a, b, c, d, e, f, g, h, i, j) where
+   toSElem (a,b,c,d,e,f,g,h,i,j) = t2map [toSElem a, toSElem b, toSElem c, toSElem d, toSElem e, toSElem f, toSElem g, toSElem h, toSElem i, toSElem j]
