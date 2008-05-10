@@ -2,7 +2,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_HADDOCK not-home #-}
 
-module Text.StringTemplate.Instances where
+module Text.StringTemplate.Instances() where
 import Text.StringTemplate.Classes
 
 import qualified Data.Map as M
