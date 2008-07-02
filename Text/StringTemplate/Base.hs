@@ -368,9 +368,9 @@ functn = do
        <|> try (string "length") <|> string "last"
   (fApply f .) <$> around '(' subexprn ')'
       where fApply str (LI xs)
-                | str == "first"  = head xs
+                | str == "first"  = if null xs then SNull else head xs
                 | str == "last"   = last xs
-                | str == "rest"   = (LI . tail) xs
+                | str == "rest"   = if null xs then SNull else (LI . tail) xs
                 | str == "strip"  = LI . filter (not . liNil) $ xs
                 | str == "length" = STR . show . length $ xs
             fApply str x
