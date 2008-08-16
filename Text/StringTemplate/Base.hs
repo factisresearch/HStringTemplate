@@ -190,7 +190,8 @@ showVal snv se =
           stEncode = stFromString . senc snv
 
 showStr :: Stringable a => String -> SEnv a -> a
-showStr = flip showVal . STR
+--showStr = flip showVal . STR
+showStr s = const (stFromString $ s)
 
 {--------------------------------------------------------------------
   Utility Combinators
