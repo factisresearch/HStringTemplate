@@ -27,11 +27,6 @@ import Text.StringTemplate.Classes
 (<$$>) :: (Functor f1, Functor f) => (a -> b) -> f (f1 a) -> f (f1 b)
 (<$$>) x y = ((<$>) . (<$>)) x y
 
-sgInsert :: (String -> StFirst (StringTemplate a)) -> StringTemplate a -> StringTemplate a
-sgInsert   g st = let e = senv st in st {senv = e {sgen = sgen e `mappend` g} }
-sgOverride :: STGroup a -> StringTemplate a -> StringTemplate a
-sgOverride g st = let e = senv st in st {senv = e {sgen = g `mappend` sgen e} }
-
 {--------------------------------------------------------------------
   Group API
 --------------------------------------------------------------------}
@@ -41,7 +36,7 @@ sgOverride g st = let e = senv st in st {senv = e {sgen = g `mappend` sgen e} }
 groupStringTemplates :: [(String,StringTemplate a)] -> STGroup a
 groupStringTemplates xs = newGen
     where newGen s = StFirst (M.lookup s ng)
-          ng = M.fromList $ map (second $ sgInsert newGen) xs
+          ng = M.fromList $ map (second $ inSGen (`mappend` newGen)) xs
 
 -- | Given a path, returns a group which generates all files in said directory
 -- which have the proper \"st\" extension.
@@ -71,12 +66,12 @@ directoryGroupLazy path = groupStringTemplates <$>
 -- | Adds a supergroup to any StringTemplate group such that templates from
 -- the original group are now able to call ones from the supergroup as well.
 addSuperGroup :: STGroup a -> STGroup a -> STGroup a
-addSuperGroup f g = sgInsert g <$$> f
+addSuperGroup f g = inSGen (`mappend` g) <$$> f
 
 -- | Adds a \"subgroup\" to any StringTemplate group such that templates from
 -- the original group now have template calls \"shadowed\" by the subgroup.
 addSubGroup :: STGroup a -> STGroup a -> STGroup a
-addSubGroup f g = sgOverride g <$$> f
+addSubGroup f g = inSGen (g `mappend`) <$$> f
 
 -- | Merges two groups into a single group. This function is left-biased,
 -- prefering bindings from the first group when there is a conflict.
@@ -85,12 +80,12 @@ mergeSTGroups f g = addSuperGroup f g `mappend` addSubGroup g f
 
 -- | Adds a set of global options to a group
 optInsertGroup :: [(String, String)] -> STGroup a -> STGroup a
-optInsertGroup opts f = optInsertTmpl opts <$$> f
+optInsertGroup opts f = (inSGen (optInsertGroup opts) . optInsertTmpl opts) <$$> f
 
 -- | Sets an encoding function of a group that all values are
 -- rendered with in each enclosed template
 setEncoderGroup :: (Stringable a) => (String -> String) ->  STGroup a -> STGroup a
-setEncoderGroup x f = setEncoder x <$$> f
+setEncoderGroup x f = (inSGen (setEncoderGroup x) . setEncoder x) <$$> f
 
 -- | For any requested template, returns a message that the template was
 -- unable to be found. Useful to add as a super group for a set of templates

@@ -2,7 +2,7 @@
 
 module Text.StringTemplate.Base
     (StringTemplate(..), StringTemplateShows(..), ToSElem(..), STGroup,
-     Stringable(..), stShowsToSE,
+     Stringable(..), stShowsToSE, inSGen,
      toString, toPPDoc, render, newSTMP, newAngleSTMP,
      getStringTemplate, getStringTemplate',
      setAttribute, setManyAttrib, withContext, optInsertTmpl, setEncoder,
@@ -52,7 +52,6 @@ paddedTrans n as = take (maximum . map length $ as) . trans $ as
           trans _ = [];
           h (x:_) = x; h _ = n; t (_:y:xs) = (y:xs); t _ = [n];
           m (x:xs) = (x:xs); m _ = [n];
-
 
 {--------------------------------------------------------------------
   StringTemplate and the API
@@ -142,6 +141,9 @@ dumpAttribs = STMP (SEnv M.empty [] mempty id) $ \env -> showVal env (SM $ smp e
 --IMPLEMENT groups having stLookup return a Maybe for regions
 
 data SEnv a = SEnv {smp :: SMap a, sopts :: [(String, (SEnv a -> SElem a))], sgen :: STGroup a, senc :: String -> String}
+
+inSGen :: (STGroup a -> STGroup a) -> StringTemplate a -> StringTemplate a
+inSGen f st@STMP{senv = env} = st {senv = env {sgen = f (sgen env)} }
 
 envLookup :: (Monad m) => String -> SEnv a -> m (SElem a)
 envLookup x = M.lookup x . smp
@@ -324,7 +326,7 @@ endifstat = getState >>= char . fst >> string "endif" >> return (showStr "")
 exprn :: Stringable a => GenParser Char (Char,Char) (SEnv a -> a)
 exprn = do
   exprs <- comlist subexprn <?> "expression"
-  templ <- many (char ':' >> iterApp <$> comlist (anonTmpl <|> regTemplate))
+  templ <- many (char ':' >> iterApp <$> comlist (anonTmpl <|> regTemplate)) <?> "template call"
   return $ fromMany (showVal <*> head exprs)
              ((sequence exprs >>=) . seqTmpls) templ
 
@@ -350,7 +352,6 @@ braceConcat :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem a)
 braceConcat = LI . foldr go [] <$$> sequence <$> around '['(comlist subexprn)']'
     where go (LI x) lst = x++lst; go x lst = x:lst
 
-
 literal :: GenParser Char st (b -> SElem a)
 literal = justSTR <$> (around '"' (concat <$> many (escapedChar "\"")) '"'
                        <|> around '\'' (concat <$> many (escapedChar "'")) '\'')
@@ -366,7 +367,7 @@ attrib = do
 functn :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem a)
 functn = do
   f <- string "first" <|> string "rest" <|> string "strip"
-       <|> try (string "length") <|> string "last"
+       <|> try (string "length") <|> string "last" <?> "function"
   (fApply f .) <$> around '(' subexprn ')'
       where fApply str (LI xs)
                 | str == "first"  = if null xs then SNull else head xs
