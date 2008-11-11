@@ -145,7 +145,7 @@ data SEnv a = SEnv {smp :: SMap a, sopts :: [(String, (SEnv a -> SElem a))], sge
 inSGen :: (STGroup a -> STGroup a) -> StringTemplate a -> StringTemplate a
 inSGen f st@STMP{senv = env} = st {senv = env {sgen = f (sgen env)} }
 
-envLookup :: (Monad m) => String -> SEnv a -> m (SElem a)
+envLookup :: String -> SEnv a -> Maybe (SElem a)
 envLookup x = M.lookup x . smp
 envInsert :: (String, SElem a) -> SEnv a -> SEnv a
 envInsert (s, x) y = y {smp = M.insert s x (smp y)}
