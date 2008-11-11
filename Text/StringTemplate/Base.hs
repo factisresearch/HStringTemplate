@@ -9,7 +9,7 @@ module Text.StringTemplate.Base
      paddedTrans, SEnv(..), parseSTMP, dumpAttribs
     ) where
 import Control.Monad
-import Control.Arrow hiding (pure)
+import Control.Arrow
 import Control.Applicative hiding ((<|>),many)
 import Data.Maybe
 import Data.Monoid
@@ -178,13 +178,13 @@ parseSTMP x = either (showStr .  show) (id) . runParser (stmpl False) x ""
 --------------------------------------------------------------------}
 
 showVal :: Stringable a => SEnv a -> SElem a -> a
-showVal snv se =
-    case se of (STR x) -> stEncode x
-               (LI xs) -> joinUpWith showVal xs
-               (SM sm) -> joinUpWith showAssoc $ M.assocs sm
-               (STSH x) -> stEncode (format x)
-               (SBLE x) -> x
-               SNull -> showVal <*> nullOpt $ snv
+showVal snv se = case se of
+                   STR x  -> stEncode x
+                   LI xs  -> joinUpWith showVal xs
+                   SM sm  -> joinUpWith showAssoc $ M.assocs sm
+                   STSH x -> stEncode (format x)
+                   SBLE x -> x
+                   SNull  -> showVal <*> nullOpt $ snv
     where sepVal = fromMaybe (justSTR "") =<< optLookup "separator" $ snv
           format = maybe stshow . stfshow <*> optLookup "format" $ snv
           joinUpWith f = mintercalate (showVal snv sepVal) . map (f snv)
@@ -380,7 +380,7 @@ functn = do
                 | str == "length" = STR "1"
                 | otherwise       = x
             liNil (LI x) = null x
-            liNil _ = False
+            liNil _      = False
 
 {--------------------------------------------------------------------
   Templates
@@ -404,12 +404,12 @@ liTrans = pluslen' . paddedTrans SNull . map u
           pluslen' xs = zip xs $ mkIndex [0..(length xs)]
 
 iterApp :: Stringable a => [([SElem a], [SElem a]) -> SEnv a -> a] -> [SElem a] -> SEnv a -> a
-iterApp [f] (LI xs:[]) = (mconcatMap $ pluslen xs) . flip f
+iterApp [f] (LI xs:[])    = (mconcatMap $ pluslen xs) . flip f
 iterApp [f] vars@(LI _:_) = (mconcatMap $ liTrans vars) . flip f
-iterApp [f] v = f (v,ix0)
-iterApp fs (LI xs:[]) = cycleApp fs (pluslen xs)
-iterApp fs vars@(LI _:_) = cycleApp fs (liTrans vars)
-iterApp fs xs = cycleApp fs (pluslen xs)
+iterApp [f] v             = f (v,ix0)
+iterApp fs (LI xs:[])     = cycleApp fs (pluslen xs)
+iterApp fs vars@(LI _:_)  = cycleApp fs (liTrans vars)
+iterApp fs xs             = cycleApp fs (pluslen xs)
 
 anonTmpl :: Stringable a => GenParser Char (Char, Char) (([SElem a], [SElem a]) -> SEnv a -> a)
 anonTmpl = around '{' subStmp '}'
