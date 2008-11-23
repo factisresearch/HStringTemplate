@@ -19,7 +19,7 @@ data ToSElemD a = ToSElemD { toSElemD :: Stringable b => a -> SElem b }
 toSElemProxy :: Proxy ToSElemD
 toSElemProxy = error "This value should never be evaluated!"
 
-instance ToSElem a => Sat (ToSElemD a) where
+instance (ToSElem a, Data ToSElemD a) => Sat (ToSElemD a) where
    dict = ToSElemD { toSElemD = toSElem }
 
 genericToSElem :: (Data ToSElemD a, ToSElem a, Stringable b) => a -> SElem b

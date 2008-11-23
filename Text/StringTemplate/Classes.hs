@@ -1,4 +1,4 @@
-{-# LANGUAGE ExistentialQuantification, FlexibleInstances #-}
+{-# LANGUAGE ExistentialQuantification, FlexibleInstances, StandaloneDeriving, GeneralizedNewtypeDeriving #-}
 {-# OPTIONS_HADDOCK not-home #-}
 module Text.StringTemplate.Classes
     (SElem(..), StringTemplateShows(..), ToSElem(..), SMap, STShow(..),
