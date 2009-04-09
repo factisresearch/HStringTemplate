@@ -300,10 +300,12 @@ optExpr = do
 --------------------------------------------------------------------}
 
 getProp :: Stringable a => [SEnv a -> SElem a] -> SElem a -> SEnv a -> SElem a
-getProp (p:ps) (SM mp) = maybe SNull . flip (getProp ps) <*>
-                          flip M.lookup mp . ap (stToString <$$> showVal) p
-getProp (_:_) _ = const SNull
-getProp _ se = const se
+getProp (p:ps) (SM mp) env =
+  case M.lookup (stToString . showVal env $ p env) mp of
+    Just prop -> getProp ps prop env
+    Nothing -> SNull
+getProp (_:_) _ _ = SNull
+getProp _ se _ = se
 
 ifIsSet :: t -> t -> Bool -> SElem a -> t
 ifIsSet t e n SNull = if n then e else t
