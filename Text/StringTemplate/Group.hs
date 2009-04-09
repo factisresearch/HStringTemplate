@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# OPTIONS_HADDOCK not-home #-}
 
 module Text.StringTemplate.Group
@@ -5,8 +6,9 @@ module Text.StringTemplate.Group
      mergeSTGroups, directoryGroup, optInsertGroup,
      directoryGroupLazy, unsafeVolatileDirectoryGroup, nullGroup
     ) where
-import Control.Applicative hiding ((<|>),many)
+import Control.Applicative
 import Control.Arrow
+import Control.Monad
 import Data.Monoid
 import Data.List
 import System.Time
@@ -43,11 +45,11 @@ groupStringTemplates xs = newGen
 -- This function is strict, with all files read once. As it performs file IO,
 -- expect it to throw the usual exceptions.
 directoryGroup :: (Stringable a) => FilePath -> IO (STGroup a)
-directoryGroup path = groupStringTemplates <$>
-                      (fmap <$> zip . (map dropExtension)
-                       <*> mapM (newSTMP <$$> (readFile . (path </>)))
-                           =<< filter ((".st" ==) . takeExtension)
-                       <$> getDirectoryContents path)
+directoryGroup path = groupStringTemplates <$> do
+  dirContents <- filter ((".st" ==) . takeExtension) <$> getDirectoryContents path
+  forM dirContents $ \f -> do
+     stmp <- newSTMP <$> readFile (path </> f)
+     return $ (dropExtension f, stmp)
 
 -- | Given a path, returns a group which generates all files in said directory
 -- which have the proper \"st\" extension.
@@ -56,12 +58,11 @@ directoryGroup path = groupStringTemplates <$>
 -- expect it to throw the usual exceptions. And, as it is lazy, expect
 -- these exceptions in unexpected places.
 directoryGroupLazy :: (Stringable a) => FilePath -> IO (STGroup a)
-directoryGroupLazy path = groupStringTemplates <$>
-                          (fmap <$> zip . (map dropExtension)
-                           <*> mapM (unsafeInterleaveIO .
-                                     (newSTMP <$$> (readFile . (path </>))))
-                               =<< filter ((".st" ==) . takeExtension)
-                           <$> getDirectoryContents path)
+directoryGroupLazy path = groupStringTemplates <$> do
+  dirContents <- filter ((".st" ==) . takeExtension) <$> getDirectoryContents path
+  forM dirContents $ \f -> do
+     stmp <- unsafeInterleaveIO $ newSTMP <$> readFile (path </> f)
+     return $ (dropExtension f, stmp)
 
 -- | Adds a supergroup to any StringTemplate group such that templates from
 -- the original group are now able to call ones from the supergroup as well.
@@ -101,7 +102,7 @@ nullGroup = \x -> StFirst . Just . newSTMP $ "Could not find template: " ++ x
 -- templates for any sort of server application. It should be swapped out for
 -- production purposes. The dumpAttribs template is added to the returned group
 -- by default, as it should prove useful for debugging and developing templates.
-unsafeVolatileDirectoryGroup :: Stringable a => String -> Int -> IO (STGroup a)
+unsafeVolatileDirectoryGroup :: Stringable a => FilePath -> Int -> IO (STGroup a)
 unsafeVolatileDirectoryGroup path m = return . flip addSubGroup extraTmpls $ cacheSTGroup stfg
     where stfg = StFirst . Just . STMP (SEnv M.empty [] stfg id)
                  . parseSTMP ('$', '$') . unsafePerformIO . flip catch
@@ -109,18 +110,20 @@ unsafeVolatileDirectoryGroup path m = return . flip addSubGroup extraTmpls $ cac
                  . readFile . (path </>) . (++".st")
           extraTmpls = addSubGroup (groupStringTemplates [("dumpAttribs", dumpAttribs)]) nullGroup
           cacheSTGroup :: STGroup a -> STGroup a
-          cacheSTGroup g = unsafePerformIO $ go <$> newIORef M.empty
-              where go r s = unsafePerformIO $ do
-                               mp <- readIORef r
+          cacheSTGroup g = unsafePerformIO $ do
+                             !ior <- newIORef M.empty
+                             return $ \s -> unsafePerformIO $ do
+                               mp  <- readIORef ior
                                now <- getClockTime
-                               maybe (udReturn now)
-                                (\(t, st) -> if (tdSec . normalizeTimeDiff $
-                                                 diffClockTimes now t) > m
-                                             then udReturn now
-                                             else return st)
-                                . M.lookup s $ mp
-                        where udReturn now = do
-                                let st = g s
-                                atomicModifyIORef r $
-                                  flip (,) () . M.insert s (now, st)
-                                return st
+                               let udReturn now = do
+                                       let st = g s
+                                       atomicModifyIORef ior $
+                                         flip (,) () . M.insert s (now, st)
+                                       return st
+                               case M.lookup s mp of
+                                 Nothing -> udReturn now
+                                 Just (t, st) ->
+                                     if (tdSec . normalizeTimeDiff $
+                                               diffClockTimes now t) > m
+                                       then udReturn now
+                                       else return st

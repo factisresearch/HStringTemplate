@@ -5,7 +5,9 @@ module Text.StringTemplate.Base
      Stringable(..), stShowsToSE, inSGen,
      toString, toPPDoc, render, newSTMP, newAngleSTMP,
      getStringTemplate, getStringTemplate',
-     setAttribute, setManyAttrib, withContext, optInsertTmpl, setEncoder,
+     setAttribute, setManyAttrib,
+     setNativeAttribute, setManyNativeAttrib,
+     withContext, optInsertTmpl, setEncoder,
      paddedTrans, SEnv(..), parseSTMP, dumpAttribs
     ) where
 import Control.Monad
@@ -24,6 +26,8 @@ import Text.StringTemplate.Instances()
 {--------------------------------------------------------------------
   Generic Utilities
 --------------------------------------------------------------------}
+
+type TmplParser x = GenParser Char (Char, Char) x
 
 (<$$>) :: (Functor f1, Functor f) => (a -> b) -> f (f1 a) -> f (f1 b)
 (<$$>) x y = ((<$>) . (<$>)) x y
@@ -88,7 +92,7 @@ newSTMP = STMP (SEnv M.empty [] mempty id) . parseSTMP ('$','$')
 -- | Parses a String to produce a StringTemplate, delimited by angle brackets.
 -- It is constructed with a stub group that cannot look up other templates.
 newAngleSTMP :: Stringable a => String -> StringTemplate a
-newAngleSTMP = STMP (SEnv M.empty [] mempty id) . parseSTMP ('$','$')
+newAngleSTMP = STMP (SEnv M.empty [] mempty id) . parseSTMP ('<','>')
 
 -- | Yields a StringTemplate with the appropriate attribute set.
 -- If the attribute already exists, it is appended to a list.
@@ -99,6 +103,22 @@ setAttribute s x st = st {senv = envInsApp s (toSElem x) (senv st)}
 -- If any attribute already exists, it is appended to a list.
 setManyAttrib :: (ToSElem a, Stringable b) => [(String, a)] -> StringTemplate b -> StringTemplate b
 setManyAttrib = flip . foldl' . flip $ uncurry setAttribute
+
+-- | Yields a StringTemplate with the appropriate attribute set.
+-- If the attribute already exists, it is appended to a list.
+-- This will not translate the attribute through any intermediate
+-- representation, so is more efficient when, e.g. setting
+-- attributes that are large bytestrings in a bytestring template.
+setNativeAttribute :: Stringable b => String -> b -> StringTemplate b -> StringTemplate b
+setNativeAttribute s x st = st {senv = envInsApp s (SBLE x) (senv st)}
+
+-- | Yields a StringTemplate with the appropriate attributes set.
+-- If any attribute already exists, it is appended to a list.
+-- Attributes are added natively, which may provide
+-- efficiency gains.
+setManyNativeAttrib :: (Stringable b) => [(String, b)] -> StringTemplate b -> StringTemplate b
+setManyNativeAttrib = flip . foldl' . flip $ uncurry setNativeAttribute
+
 
 -- | Replaces the attributes of a StringTemplate with those
 -- described in the second argument. If the argument does not yield
@@ -216,7 +236,7 @@ word = many1 alphaNum
 comlist :: GenParser Char st a -> GenParser Char st [a]
 comlist p = spaced (p `sepBy1` spaced (char ','))
 
-props :: Stringable a => GenParser Char (Char, Char) [SEnv a -> SElem a]
+props :: Stringable a => TmplParser [SEnv a -> SElem a]
 props = many $ char '.' >> (around '(' subexprn ')' <|> justSTR <$> word)
 
 escapedChar, escapedStr :: [Char] -> GenParser Char st [Char]
@@ -231,14 +251,14 @@ escapedStr chs = concat <$> many1 (escapedChar chs)
 
 -- | if p is true, stmpl can fail gracefully, false it dies hard.
 -- Set to false at the top level, and true within if expressions.
-stmpl :: Stringable a => Bool -> GenParser Char (Char,Char) (SEnv a -> a)
+stmpl :: Stringable a => Bool -> TmplParser (SEnv a -> a)
 stmpl p = do
   (ca, cb) <- getState
   mconcat <$> many (showStr <$> escapedStr [ca] <|> try (around ca optExpr cb)
                     <|> try comment <|> bl <?> "template")
       where bl | p = try blank | otherwise = blank
 
-subStmp :: Stringable a => GenParser Char (Char,Char) (([SElem a], [SElem a]) -> SEnv a -> a)
+subStmp :: Stringable a => TmplParser (([SElem a], [SElem a]) -> SEnv a -> a)
 subStmp = do
   (ca, cb) <- getState
   udEnv <- option (transform ["it"]) (transform <$> try attribNames)
@@ -250,13 +270,13 @@ subStmp = do
                 flip (foldr envInsert) $ zip ("i":"i0":an) (is++att)
             attribNames = (char '|' >>) . return =<< comlist (spaced word)
 
-comment :: Stringable a => GenParser Char (Char,Char) (SEnv a -> a)
+comment :: Stringable a => TmplParser (SEnv a -> a)
 comment = do
   (ca, cb) <- getState
   string (ca:'!':[]) >> manyTill anyChar (try . string $ '!':cb:[])
   return (showStr "")
 
-blank :: Stringable a => GenParser Char (Char,Char) (SEnv a -> a)
+blank :: Stringable a => TmplParser (SEnv a -> a)
 blank = do
   (ca, cb) <- getState
   char ca
@@ -264,12 +284,12 @@ blank = do
   char cb
   return (showStr "")
 
-optExpr :: Stringable a => GenParser Char (Char,Char) (SEnv a -> a)
+optExpr :: Stringable a => TmplParser (SEnv a -> a)
 optExpr = do
   (_, cb) <- getState
   (try (string ("else"++[cb])) <|> try (string "elseif(") <|>
     try (string "endif")) .>> fail "Malformed If Statement." <|> return ()
-  expr <- try stat <|> spaced exprn
+  expr <- try ifstat <|> spaced exprn
   opts <- many opt
   skipMany (char ';')
   return $ expr |. optInsert opts
@@ -289,26 +309,22 @@ ifIsSet :: t -> t -> Bool -> SElem a -> t
 ifIsSet t e n SNull = if n then e else t
 ifIsSet t e n _ = if n then t else e
 
-parseif :: Stringable a => Char -> GenParser Char (Char, Char) (Bool, SEnv a -> SElem a, [SEnv a -> SElem a], Char, SEnv a -> a, SEnv a -> a)
-parseif cb = (,,,,,) `fmap` option True (char '!' >> return False) `ap` subexprn
-             `ap` props `ap` (char ')' >> char cb) `ap` stmpl True `ap`
-             (try elseifstat <|> try elsestat <|> endifstat)
-
-stat ::Stringable a => GenParser Char (Char, Char) (SEnv a -> a)
-stat = do
+ifstat ::Stringable a => TmplParser (SEnv a -> a)
+ifstat = do
   (_, cb) <- getState
   string "if("
-  (n, e, p, _, act, cont) <- parseif cb
+  n <- option True (char '!' >> return False)
+  e <- subexprn
+  p <- props
+  char ')' >> char cb
+  act <- stmpl True
+  cont <- (try elseifstat <|> try elsestat <|> endifstat)
   return (ifIsSet act cont n =<< getProp p =<< e)
 
-elseifstat ::Stringable a => GenParser Char (Char, Char) (SEnv a -> a)
-elseifstat = do
-  (ca, cb) <- getState
-  char ca >> string "elseif("
-  (n, e, p, _, act, cont) <- parseif cb
-  return (ifIsSet act cont n =<< getProp p =<< e)
+elseifstat ::Stringable a => TmplParser (SEnv a -> a)
+elseifstat = getState >>= char . fst >> string "else" >> ifstat
 
-elsestat ::Stringable a => GenParser Char (Char, Char) (SEnv a -> a)
+elsestat ::Stringable a => TmplParser (SEnv a -> a)
 elsestat = do
   (ca, cb) <- getState
   around ca (string "else") cb
@@ -316,14 +332,14 @@ elsestat = do
   char ca >> string "endif"
   return act
 
-endifstat ::Stringable a => GenParser Char (Char, Char) (SEnv a -> a)
+endifstat ::Stringable a => TmplParser (SEnv a -> a)
 endifstat = getState >>= char . fst >> string "endif" >> return (showStr "")
 
 {--------------------------------------------------------------------
   Expressions
 --------------------------------------------------------------------}
 
-exprn :: Stringable a => GenParser Char (Char,Char) (SEnv a -> a)
+exprn :: Stringable a => TmplParser (SEnv a -> a)
 exprn = do
   exprs <- comlist subexprn <?> "expression"
   templ <- many (char ':' >> iterApp <$> comlist (anonTmpl <|> regTemplate)) <?> "template call"
@@ -335,7 +351,7 @@ seqTmpls [f]    y = f y
 seqTmpls (f:fs) y = seqTmpls fs =<< (:[]) . SBLE . f y
 seqTmpls  _ _     = const (stFromString "")
 
-subexprn :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem a)
+subexprn :: Stringable a => TmplParser (SEnv a -> SElem a)
 subexprn = cct <$> spaced
             (braceConcat
              <|> SBLE <$$> ($ ([SNull],ix0)) <$> try regTemplate
@@ -348,15 +364,15 @@ subexprn = cct <$> spaced
           cct [x] = x
           cct  _  = const SNull
 
-braceConcat :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem a)
+braceConcat :: Stringable a => TmplParser (SEnv a -> SElem a)
 braceConcat = LI . foldr go [] <$$> sequence <$> around '['(comlist subexprn)']'
     where go (LI x) lst = x++lst; go x lst = x:lst
 
 literal :: GenParser Char st (b -> SElem a)
 literal = justSTR <$> (around '"' (concat <$> many (escapedChar "\"")) '"'
-                       <|> around '\'' (concat <$> many (escapedChar "'")) '\'')
+                   <|> around '\'' (concat <$> many (escapedChar "'")) '\'')
 
-attrib :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem a)
+attrib :: Stringable a => TmplParser (SEnv a -> SElem a)
 attrib = do
   a <- literal <|> try functn <|> prepExp <$> word <|> around '(' subexprn ')'
          <?> "attribute"
@@ -364,7 +380,7 @@ attrib = do
   return $ fromMany a ((a >>=) . getProp) proprs
       where prepExp var = fromMaybe SNull <$> envLookup var
 
-functn :: Stringable a => GenParser Char (Char,Char) (SEnv a -> SElem a)
+functn :: Stringable a => TmplParser (SEnv a -> SElem a)
 functn = do
   f <- string "first" <|> string "rest" <|> string "strip"
        <|> try (string "length") <|> string "last" <?> "function"
@@ -411,12 +427,12 @@ iterApp fs (LI xs:[])     = cycleApp fs (pluslen xs)
 iterApp fs vars@(LI _:_)  = cycleApp fs (liTrans vars)
 iterApp fs xs             = cycleApp fs (pluslen xs)
 
-anonTmpl :: Stringable a => GenParser Char (Char, Char) (([SElem a], [SElem a]) -> SEnv a -> a)
+anonTmpl :: Stringable a => TmplParser (([SElem a], [SElem a]) -> SEnv a -> a)
 anonTmpl = around '{' subStmp '}'
 
-regTemplate :: Stringable a => GenParser Char (Char, Char) (([SElem a], [SElem a]) -> SEnv a -> a)
+regTemplate :: Stringable a => TmplParser (([SElem a], [SElem a]) -> SEnv a -> a)
 regTemplate = do
-  try (functn::GenParser Char (Char,Char) (SEnv String -> SElem String)) .>> fail "" <|> return ()
+  try (functn::TmplParser (SEnv String -> SElem String)) .>> fail "" <|> return ()
   name <- justSTR <$> many1 (alphaNum <|> char '/'<|> char '_')
           <|> around '(' subexprn ')'
   vals <- around '(' (spaced $ try assgn <|> anonassgn <|> return []) ')'

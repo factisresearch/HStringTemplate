@@ -3,7 +3,7 @@
 module Properties where
 import Text.Printf
 import Control.Monad
-import Control.Arrow hiding (pure)
+import Control.Arrow
 import Control.Applicative hiding ((<|>),many)
 import Data.Maybe
 import Data.Monoid

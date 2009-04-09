@@ -45,7 +45,9 @@ module Text.StringTemplate (
   -- * Display
   toString, toPPDoc, render, dumpAttribs,
   -- * Modification
-  setAttribute, (|=), setManyAttrib, withContext,
+  setAttribute, (|=), setManyAttrib,
+  setNativeAttribute, setManyNativeAttrib,
+  withContext,
   optInsertTmpl, optInsertGroup,
   setEncoder, setEncoderGroup,
   -- * Groups
