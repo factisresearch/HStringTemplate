@@ -4,7 +4,8 @@
 module Text.StringTemplate.Group
     (groupStringTemplates, addSuperGroup, addSubGroup, setEncoderGroup,
      mergeSTGroups, directoryGroup, optInsertGroup,
-     directoryGroupLazy, unsafeVolatileDirectoryGroup, nullGroup
+     directoryGroupLazy, directoryGroupRecursive, directoryGroupRecursiveLazy,
+     unsafeVolatileDirectoryGroup, nullGroup
     ) where
 import Control.Applicative
 import Control.Arrow
@@ -29,6 +30,22 @@ import Text.StringTemplate.Classes
 (<$$>) :: (Functor f1, Functor f) => (a -> b) -> f (f1 a) -> f (f1 b)
 (<$$>) x y = ((<$>) . (<$>)) x y
 
+readFile' :: FilePath -> IO String
+readFile' f = do
+  x <- readFile f
+  length x `seq` return x
+
+groupFromFiles :: Stringable a => (FilePath -> IO String) -> [(FilePath,String)] -> IO (STGroup a)
+groupFromFiles rf fs = groupStringTemplates <$> forM fs  (\(f,fname) -> do
+     stmp <- newSTMP <$> rf f
+     return $ (fname, stmp))
+
+getTmplsRecursive base fp = do
+          dirContents <- getDirectoryContents fp
+          subDirs <- filterM doesDirectoryExist =<< getDirectoryContents fp
+          subs <- concat <$> mapM (\x -> getTmplsRecursive (base </> x) (fp </> x)) subDirs
+          return $ (map (\x -> (fp </> x, base </> x)) $ filter ((".st" ==) . takeExtension) dirContents) ++ subs
+
 {--------------------------------------------------------------------
   Group API
 --------------------------------------------------------------------}
@@ -45,24 +62,32 @@ groupStringTemplates xs = newGen
 -- This function is strict, with all files read once. As it performs file IO,
 -- expect it to throw the usual exceptions.
 directoryGroup :: (Stringable a) => FilePath -> IO (STGroup a)
-directoryGroup path = groupStringTemplates <$> do
-  dirContents <- filter ((".st" ==) . takeExtension) <$> getDirectoryContents path
-  forM dirContents $ \f -> do
-     stmp <- newSTMP <$> readFile (path </> f)
-     return $ (dropExtension f, stmp)
+directoryGroup path =
+    groupFromFiles readFile' .
+    map (\x -> (path </> x, takeBaseName x)) . filter ((".st" ==) . takeExtension) =<<
+    getDirectoryContents path
 
 -- | Given a path, returns a group which generates all files in said directory
 -- which have the proper \"st\" extension.
 -- This function is lazy in the same way that readFile is lazy, with all
--- files read on demand, but no more than once. As it performs file IO,
+-- files read on demand, but no more than once. The list of files, however,
+-- is generated at the time the function is called. As this performs file IO,
 -- expect it to throw the usual exceptions. And, as it is lazy, expect
 -- these exceptions in unexpected places.
 directoryGroupLazy :: (Stringable a) => FilePath -> IO (STGroup a)
-directoryGroupLazy path = groupStringTemplates <$> do
-  dirContents <- filter ((".st" ==) . takeExtension) <$> getDirectoryContents path
-  forM dirContents $ \f -> do
-     stmp <- unsafeInterleaveIO $ newSTMP <$> readFile (path </> f)
-     return $ (dropExtension f, stmp)
+directoryGroupLazy path =
+    groupFromFiles readFile .
+    map (\x -> (path </> x, takeBaseName x)) . filter ((".st" ==) . takeExtension) =<<
+    getDirectoryContents path
+
+-- | As with 'directoryGroup', but traverses subdirectories as well. A template named
+-- \"foo/bar.st\" may be referenced by \"foo/bar\" in the returned group.
+directoryGroupRecursive :: (Stringable a) => FilePath -> IO (STGroup a)
+directoryGroupRecursive path = groupFromFiles readFile' =<< getTmplsRecursive "" path
+
+-- | See documentation for 'directoryGroupRecursive'.
+directoryGroupRecursiveLazy :: (Stringable a) => FilePath -> IO (STGroup a)
+directoryGroupRecursiveLazy path = groupFromFiles readFile =<< getTmplsRecursive "" path
 
 -- | Adds a supergroup to any StringTemplate group such that templates from
 -- the original group are now able to call ones from the supergroup as well.
@@ -95,7 +120,7 @@ nullGroup :: Stringable a => STGroup a
 nullGroup = \x -> StFirst . Just . newSTMP $ "Could not find template: " ++ x
 
 -- | Given an integral amount of seconds and a path, returns a group generating
--- all files in said directory with the proper \"st\" extension,
+-- all files in said directory and subdirectories with the proper \"st\" extension,
 -- cached for that amount of seconds. IO errors are \"swallowed\" by this so
 -- that exceptions don't arise in unexpected places.
 -- This violates referential transparency, but can be very useful in developing

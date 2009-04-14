@@ -53,6 +53,7 @@ module Text.StringTemplate (
   -- * Groups
   groupStringTemplates, addSuperGroup, addSubGroup,
   mergeSTGroups, directoryGroup, unsafeVolatileDirectoryGroup,
+  directoryGroupRecursive, directoryGroupRecursiveLazy,
   directoryGroupLazy, nullGroup
   ) where
 import Text.StringTemplate.Base
