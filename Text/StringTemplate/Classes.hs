@@ -23,7 +23,13 @@ instance Functor StFirst where
 
 type SMap a = M.Map String (SElem a)
 
-data SElem a = STR String | STSH STShow | SM (SMap a) | LI [SElem a] | SBLE a | SNull
+data SElem a = STR String
+             | BS LB.ByteString
+             | STSH STShow
+             | SM (SMap a)
+             | LI [SElem a]
+             | SBLE a
+             | SNull
 
 -- | The ToSElem class should be instantiated for all types that can be
 -- inserted as attributes into a StringTemplate.
@@ -53,6 +59,8 @@ data STShow = forall a.(StringTemplateShows a) => STShow a
 -- Generally, the provided instances should be enough for anything.
 class Monoid a => Stringable a where
     stFromString :: String -> a
+    stFromByteString :: LB.ByteString -> a
+    stFromByteString = stFromString . LB.unpack
     stToString :: a -> String
     -- | Defaults to  @ mconcatMap m k = foldr (mappend . k) mempty m @
     mconcatMap :: [b] -> (b -> a) -> a
@@ -81,10 +89,12 @@ instance Monoid PP.Doc where
 
 instance Stringable B.ByteString where
     stFromString = B.pack
+    stFromByteString = B.concat . LB.toChunks
     stToString = B.unpack
 
 instance Stringable LB.ByteString where
     stFromString = LB.pack
+    stFromByteString = id
     stToString = LB.unpack
 
 instance Stringable (Endo String) where

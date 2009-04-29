@@ -7,6 +7,8 @@ import Text.StringTemplate.Classes
 
 import qualified Data.Map as M
 import Numeric
+import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString.Lazy.Char8 as LB
 import Data.Ratio
 import Data.Array
 import Data.Maybe
@@ -24,6 +26,12 @@ import Data.Time
 instance ToSElem Char where
     toSElem = STR . (:[])
     toSElemList = STR
+
+instance ToSElem LB.ByteString where
+    toSElem = BS
+
+instance ToSElem B.ByteString where
+    toSElem = BS . LB.fromChunks . (:[])
 
 instance ToSElem Bool where
     toSElem True = STR ""

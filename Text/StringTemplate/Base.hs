@@ -200,6 +200,7 @@ parseSTMP x = either (showStr .  show) (id) . runParser (stmpl False) x ""
 showVal :: Stringable a => SEnv a -> SElem a -> a
 showVal snv se = case se of
                    STR x  -> stEncode x
+                   BS  x  -> stFromByteString x
                    LI xs  -> joinUpWith showVal xs
                    SM sm  -> joinUpWith showAssoc $ M.assocs sm
                    STSH x -> stEncode (format x)
@@ -292,7 +293,7 @@ optExpr = do
   expr <- try ifstat <|> spaced exprn
   opts <- many opt
   skipMany (char ';')
-  return $ expr |. optInsert opts
+  return $ expr . optInsert opts
       where opt = around ';' (spaced word) '=' >>= (<$> spaced subexprn) . (,)
 
 {--------------------------------------------------------------------
@@ -382,6 +383,7 @@ attrib = do
   return $ fromMany a ((a >>=) . getProp) proprs
       where prepExp var = fromMaybe SNull <$> envLookup var
 
+--add null func
 functn :: Stringable a => TmplParser (SEnv a -> SElem a)
 functn = do
   f <- string "first" <|> string "rest" <|> string "strip"

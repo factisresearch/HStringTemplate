@@ -40,6 +40,7 @@ groupFromFiles rf fs = groupStringTemplates <$> forM fs  (\(f,fname) -> do
      stmp <- newSTMP <$> rf f
      return $ (fname, stmp))
 
+getTmplsRecursive :: FilePath -> FilePath -> IO [(FilePath, FilePath)]
 getTmplsRecursive base fp = do
           dirContents <- getDirectoryContents fp
           subDirs <- filterM doesDirectoryExist =<< getDirectoryContents fp
@@ -139,16 +140,16 @@ unsafeVolatileDirectoryGroup path m = return . flip addSubGroup extraTmpls $ cac
                              !ior <- newIORef M.empty
                              return $ \s -> unsafePerformIO $ do
                                mp  <- readIORef ior
-                               now <- getClockTime
+                               curtime <- getClockTime
                                let udReturn now = do
                                        let st = g s
                                        atomicModifyIORef ior $
                                          flip (,) () . M.insert s (now, st)
                                        return st
                                case M.lookup s mp of
-                                 Nothing -> udReturn now
+                                 Nothing -> udReturn curtime
                                  Just (t, st) ->
                                      if (tdSec . normalizeTimeDiff $
-                                               diffClockTimes now t) > m
-                                       then udReturn now
+                                               diffClockTimes curtime t) > m
+                                       then udReturn curtime
                                        else return st
