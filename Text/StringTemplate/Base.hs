@@ -8,7 +8,8 @@ module Text.StringTemplate.Base
      setAttribute, setManyAttrib,
      setNativeAttribute, setManyNativeAttrib,
      withContext, optInsertTmpl, setEncoder,
-     paddedTrans, SEnv(..), parseSTMP, dumpAttribs
+     paddedTrans, SEnv(..), parseSTMP, dumpAttribs,
+     parseSTMPNames
     ) where
 import Control.Monad
 import Control.Arrow
@@ -27,7 +28,7 @@ import Text.StringTemplate.Instances()
   Generic Utilities
 --------------------------------------------------------------------}
 
-type TmplParser x = GenParser Char (Char, Char) x
+type TmplParser x = GenParser Char ((Char, Char),[String]) x
 
 (<$$>) :: (Functor f1, Functor f) => (a -> b) -> f (f1 a) -> f (f1 b)
 (<$$>) x y = ((<$>) . (<$>)) x y
@@ -191,7 +192,15 @@ mergeSEnvs :: SEnv a -> SEnv a -> SEnv a
 mergeSEnvs x y = SEnv {smp = M.union (smp x) (smp y), sopts = (sopts y ++ sopts x), sgen = sgen x, senc = senc y}
 
 parseSTMP :: (Stringable a) => (Char, Char) -> String -> SEnv a -> a
-parseSTMP x = either (showStr .  show) (id) . runParser (stmpl False) x ""
+parseSTMP x = either (showStr .  show) (id) . runParser (stmpl False) (x,[]) ""
+
+getSeps = fst <$> getState
+tellNames x = getState >>= \(s,n) -> setState (s,x:n)
+
+parseSTMPNames = runParser getRefs (('$','$'),[]) ""
+    where getRefs = do
+            stmpl False :: TmplParser (SEnv String -> String)
+            snd <$> getState
 
 {--------------------------------------------------------------------
   Internal API for polymorphic display of elements
@@ -254,14 +263,14 @@ escapedStr chs = concat <$> many1 (escapedChar chs)
 -- Set to false at the top level, and true within if expressions.
 stmpl :: Stringable a => Bool -> TmplParser (SEnv a -> a)
 stmpl p = do
-  (ca, cb) <- getState
+  (ca, cb) <- getSeps
   mconcat <$> many (showStr <$> escapedStr [ca] <|> try (around ca optExpr cb)
                     <|> try comment <|> bl <?> "template")
       where bl | p = try blank | otherwise = blank
 
 subStmp :: Stringable a => TmplParser (([SElem a], [SElem a]) -> SEnv a -> a)
 subStmp = do
-  (ca, cb) <- getState
+  (ca, cb) <- getSeps
   udEnv <- option (transform ["it"]) (transform <$> try attribNames)
   st <- mconcat <$> many (showStr <$> escapedStr (ca:"}|")
                          <|> try (around ca optExpr cb)
@@ -273,13 +282,13 @@ subStmp = do
 
 comment :: Stringable a => TmplParser (SEnv a -> a)
 comment = do
-  (ca, cb) <- getState
+  (ca, cb) <- getSeps
   string (ca:'!':[]) >> manyTill anyChar (try . string $ '!':cb:[])
   return (showStr "")
 
 blank :: Stringable a => TmplParser (SEnv a -> a)
 blank = do
-  (ca, cb) <- getState
+  (ca, cb) <- getSeps
   char ca
   spaces
   char cb
@@ -287,7 +296,7 @@ blank = do
 
 optExpr :: Stringable a => TmplParser (SEnv a -> a)
 optExpr = do
-  (_, cb) <- getState
+  (_, cb) <- getSeps
   (try (string ("else"++[cb])) <|> try (string "elseif(") <|>
     try (string "endif")) .>> fail "Malformed If Statement." <|> return ()
   expr <- try ifstat <|> spaced exprn
@@ -314,7 +323,7 @@ ifIsSet t e n _ = if n then t else e
 
 ifstat ::Stringable a => TmplParser (SEnv a -> a)
 ifstat = do
-  (_, cb) <- getState
+  (_, cb) <- getSeps
   string "if("
   n <- option True (char '!' >> return False)
   e <- subexprn
@@ -325,18 +334,18 @@ ifstat = do
   return (ifIsSet act cont n =<< getProp p =<< e)
 
 elseifstat ::Stringable a => TmplParser (SEnv a -> a)
-elseifstat = getState >>= char . fst >> string "else" >> ifstat
+elseifstat = getSeps >>= char . fst >> string "else" >> ifstat
 
 elsestat ::Stringable a => TmplParser (SEnv a -> a)
 elsestat = do
-  (ca, cb) <- getState
+  (ca, cb) <- getSeps
   around ca (string "else") cb
   act <- stmpl True
   char ca >> string "endif"
   return act
 
 endifstat ::Stringable a => TmplParser (SEnv a -> a)
-endifstat = getState >>= char . fst >> string "endif" >> return (showStr "")
+endifstat = getSeps >>= char . fst >> string "endif" >> return (showStr "")
 
 {--------------------------------------------------------------------
   Expressions
@@ -377,11 +386,19 @@ literal = justSTR <$> (around '"' (concat <$> many (escapedChar "\"")) '"'
 
 attrib :: Stringable a => TmplParser (SEnv a -> SElem a)
 attrib = do
-  a <- literal <|> try functn <|> prepExp <$> word <|> around '(' subexprn ')'
-         <?> "attribute"
+  a <-     literal
+       <|> try functn
+       <|> prepExp <$> word
+       <|> prepExp <$> qqWord
+       <|> around '(' subexprn ')'
+          <?> "attribute"
   proprs <- props
   return $ fromMany a ((a >>=) . getProp) proprs
       where prepExp var = fromMaybe SNull <$> envLookup var
+            qqWord = do
+              w <- around '`' word '`'
+              tellNames w
+              return $ '`' : w ++ "`"
 
 --add null func
 functn :: Stringable a => TmplParser (SEnv a -> SElem a)
