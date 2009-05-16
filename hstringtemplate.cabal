@@ -15,6 +15,7 @@ Cabal-Version:       >= 1.2
 flag small-base
 flag syb-with-class
 flag simple-generics
+flag quasi-quotation
 
 library
   if flag(syb-with-class)
@@ -25,6 +26,8 @@ library
     exposed-modules: Text.StringTemplate.GenericStandard
 
   if flag(quasi-quotation)
+    build-depends: template-haskell >= 2.3
+    extensions: QuasiQuotes
     exposed-modules: Text.StringTemplate.QQ
 
   if flag(small-base)
