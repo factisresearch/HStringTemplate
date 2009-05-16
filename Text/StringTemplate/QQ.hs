@@ -1,4 +1,19 @@
 {-# LANGUAGE DeriveDataTypeable, QuasiQuotes #-}
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  Text.StringTemplate.QQ
+-- Copyright   :  (c) Sterling Clover 2009
+-- License     :  BSD 3 Clause
+-- Maintainer  :  s.clover@gmail.com
+-- Stability   :  experimental
+-- Portability :  portable
+--
+-- This module provides stmp, a quasi-quoter for StringTemplate expressions.
+-- Quoted templates are guaranteed syntactically well-formed at compile time,
+-- and antiquotation (of identifiers only) is provided by backticks.
+-- Usage: @ let var = [0,1,2] in toString [$stmp|($`var`; separator = ', '$)|] === "(0, 1, 2)"@
+-----------------------------------------------------------------------------
+
 module Text.StringTemplate.QQ (stmp) where
 
 import Data.Generics
