@@ -27,7 +27,6 @@ library
 
   if flag(quasi-quotation)
     build-depends: template-haskell >= 2.3
-    extensions: QuasiQuotes
     exposed-modules: Text.StringTemplate.QQ
 
   if flag(small-base)
