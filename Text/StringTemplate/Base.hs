@@ -194,9 +194,13 @@ mergeSEnvs x y = SEnv {smp = M.union (smp x) (smp y), sopts = (sopts y ++ sopts 
 parseSTMP :: (Stringable a) => (Char, Char) -> String -> SEnv a -> a
 parseSTMP x = either (showStr .  show) (id) . runParser (stmpl False) (x,[]) ""
 
+getSeps :: TmplParser (Char, Char)
 getSeps = fst <$> getState
+
+tellNames :: String -> TmplParser ()
 tellNames x = getState >>= \(s,n) -> setState (s,x:n)
 
+parseSTMPNames :: String -> Either ParseError [String]
 parseSTMPNames = runParser getRefs (('$','$'),[]) ""
     where getRefs = do
             stmpl False :: TmplParser (SEnv String -> String)
