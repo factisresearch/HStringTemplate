@@ -37,3 +37,7 @@ library
                      Text.StringTemplate.Group
                      Text.StringTemplate.Renderf
   ghc-options:       -Wall
+
+source-repository head
+  type:     darcs
+  location: http://code.haskell.org/HStringTemplate/
