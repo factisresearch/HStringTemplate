@@ -19,7 +19,7 @@ instance Monoid (StFirst a) where
         StFirst Nothing `mappend` r = r
 
 instance Functor StFirst where
-    fmap f x = StFirst . fmap f . stGetFirst $ x
+    fmap f = StFirst . fmap f . stGetFirst
 
 type SMap a = M.Map String (SElem a)
 
@@ -72,7 +72,7 @@ class Monoid a => Stringable a where
     mlabel :: a -> a -> a
     mlabel x y = mconcat [x, stFromString "[", y, stFromString "]"]
 
-instance Stringable [Char] where
+instance Stringable String where
     stFromString = id
     stToString = id
 
@@ -81,7 +81,7 @@ instance Stringable PP.Doc where
     stToString = PP.render
     mconcatMap m k = PP.fcat . map k $ m
     mintercalate = (PP.fcat .) . PP.punctuate
-    mlabel x y = (x PP.$$ PP.nest 1 y)
+    mlabel x y = x PP.$$ PP.nest 1 y
 
 instance Monoid PP.Doc where
     mempty = PP.empty

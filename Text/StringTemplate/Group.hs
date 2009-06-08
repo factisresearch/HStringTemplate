@@ -28,7 +28,7 @@ import Text.StringTemplate.Classes
 --------------------------------------------------------------------}
 
 (<$$>) :: (Functor f1, Functor f) => (a -> b) -> f (f1 a) -> f (f1 b)
-(<$$>) x y = ((<$>) . (<$>)) x y
+(<$$>) = (<$>) . (<$>)
 
 readFile' :: FilePath -> IO String
 readFile' f = do
@@ -38,14 +38,14 @@ readFile' f = do
 groupFromFiles :: Stringable a => (FilePath -> IO String) -> [(FilePath,String)] -> IO (STGroup a)
 groupFromFiles rf fs = groupStringTemplates <$> forM fs  (\(f,fname) -> do
      stmp <- newSTMP <$> rf f
-     return $ (fname, stmp))
+     return (fname, stmp))
 
 getTmplsRecursive :: FilePath -> FilePath -> IO [(FilePath, FilePath)]
 getTmplsRecursive base fp = do
           dirContents <- getDirectoryContents fp
           subDirs <- filterM doesDirectoryExist =<< getDirectoryContents fp
           subs <- concat <$> mapM (\x -> getTmplsRecursive (base </> x) (fp </> x)) subDirs
-          return $ (map (\x -> (fp </> x, base </> x)) $ filter ((".st" ==) . takeExtension) dirContents) ++ subs
+          return $ (map ((</>) fp &&& (</>) base) $ filter ((".st" ==) . takeExtension) dirContents) ++ subs
 
 {--------------------------------------------------------------------
   Group API
@@ -65,7 +65,7 @@ groupStringTemplates xs = newGen
 directoryGroup :: (Stringable a) => FilePath -> IO (STGroup a)
 directoryGroup path =
     groupFromFiles readFile' .
-    map (\x -> (path </> x, takeBaseName x)) . filter ((".st" ==) . takeExtension) =<<
+    map ((</>) path &&& takeBaseName) . filter ((".st" ==) . takeExtension) =<<
     getDirectoryContents path
 
 -- | Given a path, returns a group which generates all files in said directory
@@ -78,7 +78,7 @@ directoryGroup path =
 directoryGroupLazy :: (Stringable a) => FilePath -> IO (STGroup a)
 directoryGroupLazy path =
     groupFromFiles readFile .
-    map (\x -> (path </> x, takeBaseName x)) . filter ((".st" ==) . takeExtension) =<<
+    map ((</>) path &&& takeBaseName) . filter ((".st" ==) . takeExtension) =<<
     getDirectoryContents path
 
 -- | As with 'directoryGroup', but traverses subdirectories as well. A template named
@@ -118,7 +118,7 @@ setEncoderGroup x f = (inSGen (setEncoderGroup x) . setEncoder x) <$$> f
 -- unable to be found. Useful to add as a super group for a set of templates
 -- under development, to aid in debugging.
 nullGroup :: Stringable a => STGroup a
-nullGroup = \x -> StFirst . Just . newSTMP $ "Could not find template: " ++ x
+nullGroup x = StFirst . Just . newSTMP $ "Could not find template: " ++ x
 
 -- | Given an integral amount of seconds and a path, returns a group generating
 -- all files in said directory and subdirectories with the proper \"st\" extension,

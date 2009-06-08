@@ -10,7 +10,7 @@ import qualified Data.Map as M
 import Text.StringTemplate.Classes
 import Data.Generics.SYB.WithClass.Basics
 
-stripInitialUnderscores :: [Char] -> [Char]
+stripInitialUnderscores :: String -> String
 stripInitialUnderscores ('_':s) = stripInitialUnderscores s
 stripInitialUnderscores s       = s
 
@@ -27,14 +27,14 @@ genericToSElem x
        | isAlgType (dataTypeOf toSElemProxy x) =
            case (map stripInitialUnderscores (getFields x)) of
              [] -> LI (STR (showConstr (toConstr toSElemProxy x)) :
-                           (gmapQ toSElemProxy (toSElemD dict) x))
+                           gmapQ toSElemProxy (toSElemD dict) x)
              fs -> SM (M.fromList (zip fs (gmapQ toSElemProxy (toSElemD dict) x)))
        | True =
                error ("Unable to serialize the primitive type '" ++
                       dataTypeName (dataTypeOf toSElemProxy x) ++ "'")
 
 getFields :: Data ToSElemD a => a -> [String]
-getFields = constrFields . (toConstr toSElemProxy)
+getFields = constrFields . toConstr toSElemProxy
 
 instance Data ToSElemD t => ToSElem t where
    toSElem = genericToSElem

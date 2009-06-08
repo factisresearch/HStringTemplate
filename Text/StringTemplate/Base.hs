@@ -28,14 +28,14 @@ import Text.StringTemplate.Instances()
   Generic Utilities
 --------------------------------------------------------------------}
 
-type TmplParser x = GenParser Char ((Char, Char),[String]) x
+type TmplParser = GenParser Char ((Char, Char),[String])
 
 (<$$>) :: (Functor f1, Functor f) => (a -> b) -> f (f1 a) -> f (f1 b)
-(<$$>) x y = ((<$>) . (<$>)) x y
+(<$$>) = (<$>) . (<$>)
 infixr 8 <$$>
 
 (|.) :: (t1 -> t2) -> (t -> t1) -> t -> t2
-(|.) f g x = f (g x)
+(|.) f g = f . g
 infixr 3 |.
 
 (.>>) :: (Monad m) => m a -> m b -> m b
@@ -52,11 +52,11 @@ swing = flip . (. flip id)
 paddedTrans :: a -> [[a]] -> [[a]]
 paddedTrans _ [] = []
 paddedTrans n as = take (maximum . map length $ as) . trans $ as
-    where trans ([] : xss)  = (n : map h xss) :  trans ([n] : (map t xss))
-          trans ((x : xs) : xss) = (x : map h xss) : trans (m xs : (map t xss))
+    where trans ([] : xss)  = (n : map h xss) :  trans ([n] : map t xss)
+          trans ((x : xs) : xss) = (x : map h xss) : trans (m xs : map t xss)
           trans _ = [];
-          h (x:_) = x; h _ = n; t (_:y:xs) = (y:xs); t _ = [n];
-          m (x:xs) = (x:xs); m _ = [n];
+          h (x:_) = x; h _ = n; t (_:y:xs) = y:xs; t _ = [n];
+          m (x:xs) = x:xs; m _ = [n];
 
 {--------------------------------------------------------------------
   StringTemplate and the API
@@ -182,7 +182,7 @@ optInsert x env = env {sopts = x ++ sopts env}
 nullOpt :: SEnv a -> SElem a
 nullOpt = fromMaybe (justSTR "") =<< optLookup "null"
 
-stLookup :: (Stringable a) => [Char] -> SEnv a -> StringTemplate a
+stLookup :: (Stringable a) => String -> SEnv a -> StringTemplate a
 stLookup x env = maybe (newSTMP ("No Template Found for: " ++ x))
                  (\st-> st {senv = mergeSEnvs env (senv st)}) $ stGetFirst (sgen env x)
 
@@ -192,7 +192,7 @@ mergeSEnvs :: SEnv a -> SEnv a -> SEnv a
 mergeSEnvs x y = SEnv {smp = M.union (smp x) (smp y), sopts = (sopts y ++ sopts x), sgen = sgen x, senc = senc y}
 
 parseSTMP :: (Stringable a) => (Char, Char) -> String -> SEnv a -> a
-parseSTMP x = either (showStr .  show) (id) . runParser (stmpl False) (x,[]) ""
+parseSTMP x = either (showStr .  show) id . runParser (stmpl False) (x,[]) ""
 
 getSeps :: TmplParser (Char, Char)
 getSeps = fst <$> getState
@@ -227,7 +227,7 @@ showVal snv se = case se of
 
 showStr :: Stringable a => String -> SEnv a -> a
 --showStr = flip showVal . STR
-showStr s = const (stFromString $ s)
+showStr = const . stFromString
 
 {--------------------------------------------------------------------
   Utility Combinators
@@ -245,7 +245,7 @@ around :: Char -> GenParser Char st t -> Char -> GenParser Char st t
 around x p y = do {char x; v<-p; char y; return v}
 spaced :: GenParser Char st t -> GenParser Char st t
 spaced p = do {spaces; v<-p; spaces; return v}
-word :: GenParser Char st [Char]
+word :: GenParser Char st String
 word = many1 alphaNum
 comlist :: GenParser Char st a -> GenParser Char st [a]
 comlist p = spaced (p `sepBy1` spaced (char ','))
@@ -253,7 +253,7 @@ comlist p = spaced (p `sepBy1` spaced (char ','))
 props :: Stringable a => TmplParser [SEnv a -> SElem a]
 props = many $ char '.' >> (around '(' subexprn ')' <|> justSTR <$> word)
 
-escapedChar, escapedStr :: [Char] -> GenParser Char st [Char]
+escapedChar, escapedStr :: String -> GenParser Char st String
 escapedChar chs =
     noneOf chs >>= \x -> if x == '\\' then anyChar >>= \y ->
     if y `elem` chs then return [y] else return [x, y] else return [x]
@@ -287,7 +287,7 @@ subStmp = do
 comment :: Stringable a => TmplParser (SEnv a -> a)
 comment = do
   (ca, cb) <- getSeps
-  string (ca:'!':[]) >> manyTill anyChar (try . string $ '!':cb:[])
+  string [ca,'!'] >> manyTill anyChar (try . string $ ['!',cb])
   return (showStr "")
 
 blank :: Stringable a => TmplParser (SEnv a -> a)
@@ -417,7 +417,7 @@ functn = do
                 | str == "strip"  = LI . filter (not . liNil) $ xs
                 | str == "length" = STR . show . length $ xs
             fApply str x
-                | str == "rest"   = (LI [])
+                | str == "rest"   = LI []
                 | str == "length" = STR "1"
                 | otherwise       = x
             liNil (LI x) = null x

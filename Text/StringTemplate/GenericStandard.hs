@@ -15,7 +15,7 @@ gToSElem :: forall a b.(Data a, Stringable b) => a -> SElem b
 gToSElem = (\x ->
             case (map stripInitUnder (constrFields . toConstr $ x)) of
               [] -> LI (STR (showConstr (toConstr x)) :
-                        (gmapQ gToSElem x))
+                        gmapQ gToSElem x)
               fs -> SM (M.fromList (zip fs (gmapQ gToSElem x)))
            )
            `ext1Q` (\t -> case t of (Just x) -> gToSElem x; _ -> SNull)
@@ -31,6 +31,6 @@ gToSElem = (\x ->
 instance Data a => ToSElem a
     where toSElem = gToSElem
 
-stripInitUnder :: [Char] -> [Char]
+stripInitUnder :: String -> String
 stripInitUnder ('_':s) = stripInitUnder s
 stripInitUnder s       = s

@@ -9,6 +9,7 @@ import Text.StringTemplate.Instances
 import Text.StringTemplate.Base
 import Text.StringTemplate.Group
 import Test.HUnit
+import Control.Monad
 import System.Environment
 
 no_prop = toString (setAttribute "foo" "f" $ newSTMP "a$foo.bar$a")
@@ -36,6 +37,5 @@ tests = TestList ["no_prop" ~: no_prop,
 
 main = do
   c <- runTestTT tests
-  if (errors c > 0 || failures c > 0)
-    then fail "Not all tests passed."
-    else return ()
+  when (errors c > 0 || failures c > 0) $
+    fail "Not all tests passed."

@@ -26,8 +26,7 @@ main :: IO ()
 main = do
     args <- getArgs
     let n = if null args then 100 else read (head args)
-    (results, passed) <- liftM unzip $ mapM
-                         (\(s,a) -> printf "%-25s: " s >> a n) tests
+    (results, passed) <- mapAndUnzipM (\ (s, a) -> printf "%-25s: " s >> a n) tests
     printf "Passed %d tests!\n" (sum passed)
     when (not . and $ results) $ fail "Not all tests passed!"
  where

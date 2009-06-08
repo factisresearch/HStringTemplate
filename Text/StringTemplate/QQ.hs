@@ -33,10 +33,9 @@ quoteTmplExp s = return tmpl
     vars = case parseSTMPNames s of
              Right xs -> xs
              Left  err -> error $ show err
-    base  = TH.AppE (TH.VarE (TH.mkName "newSTMP")) (TH.LitE (TH.StringL $ s))
+    base  = TH.AppE (TH.VarE (TH.mkName "newSTMP")) (TH.LitE (TH.StringL s))
     tmpl  = foldr addAttrib base vars
-    addAttrib var x = TH.AppE
+    addAttrib var = TH.AppE
         (TH.AppE (TH.AppE (TH.VarE (TH.mkName "setAttribute"))
                           (TH.LitE (TH.StringL ('`' : var ++ "`"))))
                  (TH.VarE (TH.mkName  var)))
-        x

@@ -9,7 +9,7 @@ instance Stringable a => SEType a a where
 instance Stringable a => SEType a (StringTemplate a) where
     renderf = id
 instance (ToSElem a, SEType b r) => SEType b ((String, a) -> r) where
-    renderf x = \(k,v) -> renderf $ setAttribute k v x
+    renderf x (k, v) = renderf $ setAttribute k v x
 
 (|=) :: (Monad m) => a -> m a1 -> m (a, a1)
 k |= v = return . (,) k =<< v
