@@ -10,7 +10,7 @@ maintainer:          s.clover@gmail.com
 Tested-With:         GHC == 6.10.3
 Build-Type:          Simple
 build-Depends:       base
-Cabal-Version:       >= 1.2
+Cabal-Version:       >= 1.6
 
 flag smaller-base
 flag syb-with-class
