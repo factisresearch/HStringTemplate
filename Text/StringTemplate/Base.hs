@@ -210,6 +210,10 @@ parseSTMPNames = runParser getRefs (('$','$'),[]) ""
   Internal API for polymorphic display of elements
 --------------------------------------------------------------------}
 
+mconcatMap' :: Stringable a => SEnv a -> [b] -> (b -> a) -> a
+mconcatMap' snv xs f = mintercalate sep . map f $ xs
+    where sep = showVal snv $ fromMaybe (justSTR "") =<< optLookup "separator" $ snv
+
 showVal :: Stringable a => SEnv a -> SElem a -> a
 showVal snv se = case se of
                    STR x  -> stEncode x
@@ -219,9 +223,8 @@ showVal snv se = case se of
                    STSH x -> stEncode (format x)
                    SBLE x -> x
                    SNull  -> showVal <*> nullOpt $ snv
-    where sepVal = fromMaybe (justSTR "") =<< optLookup "separator" $ snv
-          format = maybe stshow . stfshow <*> optLookup "format" $ snv
-          joinUpWith f = mintercalate (showVal snv sepVal) . map (f snv)
+    where format = maybe stshow . stfshow <*> optLookup "format" $ snv
+          joinUpWith f xs = mconcatMap' snv xs (f snv)
           showAssoc e (k,v) = stEncode (k ++ ": ") `mlabel` showVal e v
           stEncode = stFromString . senc snv
 
@@ -304,15 +307,21 @@ optExpr = do
   (try (string ("else"++[cb])) <|> try (string "elseif(") <|>
     try (string "endif")) .>> fail "Malformed If Statement." <|> return ()
   expr <- try ifstat <|> spaced exprn
-  opts <- many opt
-  skipMany (char ';')
+  opts <- (char ';' >> optList) <|> return []
   return $ expr . optInsert opts
-      where opt = around ';' (spaced word) '=' >>= (<$> spaced subexprn) . (,)
+      where -- opt = around ';' (spaced word) '=' >>= (<$> spaced subexprn) . (,)
+            optList = sepBy oneOpt (char ',' <|> char ';')
+            oneOpt = do
+              o <- spaced word
+              char '='
+              v <- spaced subexprn
+              return (o,v)
 
 {--------------------------------------------------------------------
   Statements
 --------------------------------------------------------------------}
 
+--if env then do stuff
 getProp :: Stringable a => [SEnv a -> SElem a] -> SElem a -> SEnv a -> SElem a
 getProp (p:ps) (SM mp) env =
   case M.lookup (stToString . showVal env $ p env) mp of
@@ -434,7 +443,7 @@ ix0 :: [SElem a]
 ix0 = [STR "1",STR "0"]
 
 cycleApp :: (Stringable a) => [([SElem a], [SElem a]) -> SEnv a -> a] -> [([SElem a], [SElem a])]  -> SEnv a -> a
-cycleApp x y = mconcatMap (zipWith ($) (cycle x) y) . flip ($)
+cycleApp x y snv = mconcatMap' snv (zipWith ($) (cycle x) y) ($ snv)
 
 pluslen :: [a] -> [([a], [SElem b])]
 pluslen xs = zip (map (:[]) xs) $ mkIndex [0..(length xs)]
@@ -445,12 +454,12 @@ liTrans = pluslen' . paddedTrans SNull . map u
           pluslen' xs = zip xs $ mkIndex [0..(length xs)]
 
 iterApp :: Stringable a => [([SElem a], [SElem a]) -> SEnv a -> a] -> [SElem a] -> SEnv a -> a
-iterApp [f] (LI xs:[])    = (mconcatMap $ pluslen xs) . flip f
-iterApp [f] vars@(LI _:_) = (mconcatMap $ liTrans vars) . flip f
-iterApp [f] v             = f (v,ix0)
-iterApp fs (LI xs:[])     = cycleApp fs (pluslen xs)
-iterApp fs vars@(LI _:_)  = cycleApp fs (liTrans vars)
-iterApp fs xs             = cycleApp fs (pluslen xs)
+iterApp [f] (LI xs:[])    snv = (mconcatMap' snv $ pluslen xs) . flip f $ snv
+iterApp [f] vars@(LI _:_) snv = (mconcatMap' snv $ liTrans vars) . flip f $ snv
+iterApp [f] v             snv = f (v,ix0) snv
+iterApp fs (LI xs:[])     snv = cycleApp fs (pluslen xs) snv
+iterApp fs vars@(LI _:_)  snv = cycleApp fs (liTrans vars) snv
+iterApp fs xs             snv = cycleApp fs (pluslen xs) snv
 
 anonTmpl :: Stringable a => TmplParser (([SElem a], [SElem a]) -> SEnv a -> a)
 anonTmpl = around '{' subStmp '}'
