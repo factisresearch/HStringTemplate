@@ -42,10 +42,12 @@ groupFromFiles rf fs = groupStringTemplates <$> forM fs  (\(f,fname) -> do
 
 getTmplsRecursive :: FilePath -> FilePath -> IO [(FilePath, FilePath)]
 getTmplsRecursive base fp = do
-          dirContents <- getDirectoryContents fp
-          subDirs <- filterM doesDirectoryExist =<< getDirectoryContents fp
+          dirContents <- filter (not . isPrefixOf ".") <$> getDirectoryContents fp
+          subDirs <- filterM (doesDirectoryExist . (fp </>)) dirContents
           subs <- concat <$> mapM (\x -> getTmplsRecursive (base </> x) (fp </> x)) subDirs
-          return $ (map ((</>) fp &&& (</>) base) $ filter ((".st" ==) . takeExtension) dirContents) ++ subs
+          return $ (map ((fp </>) &&& (\x -> base </> dropExtension x)) $
+                    filter ((".st" ==) . takeExtension) dirContents)
+                   ++ subs
 
 {--------------------------------------------------------------------
   Group API

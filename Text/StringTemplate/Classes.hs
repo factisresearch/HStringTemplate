@@ -9,6 +9,10 @@ import Data.List
 import Data.Monoid
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as LB
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
+import qualified Data.Text.Lazy as LT
+import qualified Data.Text.Lazy.Encoding as LT
 import qualified Text.PrettyPrint.HughesPJ as PP
 
 newtype StFirst a = StFirst { stGetFirst :: Maybe a }
@@ -57,24 +61,33 @@ data STShow = forall a.(StringTemplateShows a) => STShow a
 
 -- | The Stringable class should be instantiated with care.
 -- Generally, the provided instances should be enough for anything.
-class Monoid a => Stringable a where
+class Stringable a where
     stFromString :: String -> a
     stFromByteString :: LB.ByteString -> a
     stFromByteString = stFromString . LB.unpack
     stToString :: a -> String
     -- | Defaults to  @ mconcatMap m k = foldr (mappend . k) mempty m @
     mconcatMap :: [b] -> (b -> a) -> a
-    mconcatMap m k = foldr (mappend . k) mempty m
+    mconcatMap m k = foldr (smappend . k) smempty m
     -- | Defaults to  @ (mconcat .) . intersperse @
     mintercalate :: a -> [a] -> a
-    mintercalate = (mconcat .) . intersperse
-    -- | Defaults to  @  mlabel x y = mconcat [x, stFromString "[", y, stFromString "]"] @
+    mintercalate = (smconcat .) . intersperse
+    -- | Defaults to  @  mlabel x y = smconcat [x, stFromString "[", y, stFromString "]"] @
     mlabel :: a -> a -> a
-    mlabel x y = mconcat [x, stFromString "[", y, stFromString "]"]
+    mlabel x y = smconcat [x, stFromString "[", y, stFromString "]"]
+    -- | Just mempty. Here to avoid orphan instances
+    smempty :: a
+    -- | Just mappend. Here to avoid orphan instances
+    smappend :: a -> a -> a
+    -- | Just mconcat. Here to avoid orphan instances
+    smconcat :: [a] -> a
+    smconcat xs = foldr (smappend . id) smempty xs
 
 instance Stringable String where
     stFromString = id
     stToString = id
+    smempty = ""
+    smappend = (++)
 
 instance Stringable PP.Doc where
     stFromString = PP.text
@@ -82,21 +95,39 @@ instance Stringable PP.Doc where
     mconcatMap m k = PP.fcat . map k $ m
     mintercalate = (PP.fcat .) . PP.punctuate
     mlabel x y = x PP.$$ PP.nest 1 y
-
-instance Monoid PP.Doc where
-    mempty = PP.empty
-    x `mappend` y = x PP.<> y
+    smempty = PP.empty
+    smappend = (PP.<>)
 
 instance Stringable B.ByteString where
     stFromString = B.pack
     stFromByteString = B.concat . LB.toChunks
     stToString = B.unpack
+    smempty = B.empty
+    smappend = B.append
 
 instance Stringable LB.ByteString where
     stFromString = LB.pack
     stFromByteString = id
     stToString = LB.unpack
+    smempty = LB.empty
+    smappend = LB.append
+
+instance Stringable T.Text where
+    stFromString = T.pack
+    stFromByteString = T.decodeUtf8 . B.concat . LB.toChunks
+    stToString = T.unpack
+    smempty = T.empty
+    smappend = T.append
+
+instance Stringable LT.Text where
+    stFromString = LT.pack
+    stFromByteString = LT.decodeUtf8
+    stToString = LT.unpack
+    smempty = LT.empty
+    smappend = LT.append
 
 instance Stringable (Endo String) where
     stFromString = Endo . (++)
     stToString = ($ []) . appEndo
+    smempty = mempty
+    smappend = mappend

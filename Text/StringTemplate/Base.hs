@@ -265,13 +265,15 @@ escapedStr chs = concat <$> many1 (escapedChar chs)
 {--------------------------------------------------------------------
   The Grammar
 --------------------------------------------------------------------}
+myConcat :: Stringable a => [SEnv a -> a] -> (SEnv a -> a)
+myConcat xs a = smconcat $ map ($ a) xs
 
 -- | if p is true, stmpl can fail gracefully, false it dies hard.
 -- Set to false at the top level, and true within if expressions.
 stmpl :: Stringable a => Bool -> TmplParser (SEnv a -> a)
 stmpl p = do
   (ca, cb) <- getSeps
-  mconcat <$> many (showStr <$> escapedStr [ca] <|> try (around ca optExpr cb)
+  myConcat <$> many (showStr <$> escapedStr [ca] <|> try (around ca optExpr cb)
                     <|> try comment <|> bl <?> "template")
       where bl | p = try blank | otherwise = blank
 
@@ -279,7 +281,7 @@ subStmp :: Stringable a => TmplParser (([SElem a], [SElem a]) -> SEnv a -> a)
 subStmp = do
   (ca, cb) <- getSeps
   udEnv <- option (transform ["it"]) (transform <$> try attribNames)
-  st <- mconcat <$> many (showStr <$> escapedStr (ca:"}|")
+  st <- myConcat <$> many (showStr <$> escapedStr (ca:"}|")
                          <|> try (around ca optExpr cb)
                          <|> try comment <|> blank  <?> "subtemplate")
   return (st <$$> udEnv)
@@ -421,7 +423,7 @@ functn = do
   (fApply f .) <$> around '(' subexprn ')'
       where fApply str (LI xs)
                 | str == "first"  = if null xs then SNull else head xs
-                | str == "last"   = last xs
+                | str == "last"   = if null xs then SNull else last xs
                 | str == "rest"   = if null xs then SNull else (LI . tail) xs
                 | str == "strip"  = LI . filter (not . liNil) $ xs
                 | str == "length" = STR . show . length $ xs
