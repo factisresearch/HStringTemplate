@@ -417,13 +417,15 @@ attrib = do
 --add null func
 functn :: Stringable a => TmplParser (SEnv a -> SElem a)
 functn = do
-  f <- string "first" <|> string "rest" <|> string "strip"
+  f <- string "first" <|> try (string "rest") <|> string "reverse"
+       <|> string "strip"
        <|> try (string "length") <|> string "last" <?> "function"
   (fApply f .) <$> around '(' subexprn ')'
       where fApply str (LI xs)
                 | str == "first"  = if null xs then SNull else head xs
                 | str == "last"   = if null xs then SNull else last xs
                 | str == "rest"   = if null xs then SNull else (LI . tail) xs
+                | str == "reverse" = LI . reverse $ xs
                 | str == "strip"  = LI . filter (not . liNil) $ xs
                 | str == "length" = STR . show . length $ xs
             fApply str x
