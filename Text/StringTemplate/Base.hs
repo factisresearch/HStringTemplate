@@ -120,7 +120,6 @@ setNativeAttribute s x st = st {senv = envInsApp s (SBLE x) (senv st)}
 setManyNativeAttrib :: (Stringable b) => [(String, b)] -> StringTemplate b -> StringTemplate b
 setManyNativeAttrib = flip . foldl' . flip $ uncurry setNativeAttribute
 
-
 -- | Replaces the attributes of a StringTemplate with those
 -- described in the second argument. If the argument does not yield
 -- a set of named attributes but only a single one, that attribute
@@ -147,7 +146,7 @@ optInsertTmpl x st = st {senv = optInsert (map (second justSTR) x) (senv st)}
 
 -- | Sets an encoding function of a template that all values are
 -- rendered with. For example one useful encoder would be 'Text.Html.stringToHtmlString'. All attributes will be encoded once and only once.
-setEncoder :: (Stringable a) => (String -> String) -> StringTemplate a -> StringTemplate a
+setEncoder :: (Stringable a) => (a -> a) -> StringTemplate a -> StringTemplate a
 setEncoder x st = st {senv = (senv st) {senc = x} }
 
 -- | A special template that simply dumps the values of all the attributes set in it.
@@ -161,7 +160,7 @@ dumpAttribs = STMP (SEnv M.empty [] mempty id) $ \env -> showVal env (SM $ smp e
 --------------------------------------------------------------------}
 --IMPLEMENT groups having stLookup return a Maybe for regions
 
-data SEnv a = SEnv {smp :: SMap a, sopts :: [(String, (SEnv a -> SElem a))], sgen :: STGroup a, senc :: String -> String}
+data SEnv a = SEnv {smp :: SMap a, sopts :: [(String, (SEnv a -> SElem a))], sgen :: STGroup a, senc :: a -> a}
 
 inSGen :: (STGroup a -> STGroup a) -> StringTemplate a -> StringTemplate a
 inSGen f st@STMP{senv = env} = st {senv = env {sgen = f (sgen env)} }
@@ -217,19 +216,19 @@ mconcatMap' snv xs f = mintercalate sep . map f $ xs
 showVal :: Stringable a => SEnv a -> SElem a -> a
 showVal snv se = case se of
                    STR x  -> stEncode x
-                   BS  x  -> stFromByteString x
+                   BS  x  -> stEncodeBS x
                    LI xs  -> joinUpWith showVal xs
                    SM sm  -> joinUpWith showAssoc $ M.assocs sm
                    STSH x -> stEncode (format x)
-                   SBLE x -> x
+                   SBLE x -> senc snv x
                    SNull  -> showVal <*> nullOpt $ snv
     where format = maybe stshow . stfshow <*> optLookup "format" $ snv
           joinUpWith f xs = mconcatMap' snv xs (f snv)
           showAssoc e (k,v) = stEncode (k ++ ": ") `mlabel` showVal e v
-          stEncode = stFromString . senc snv
+          stEncode   = senc snv . stFromString
+          stEncodeBS = senc snv . stFromByteString
 
 showStr :: Stringable a => String -> SEnv a -> a
---showStr = flip showVal . STR
 showStr = const . stFromString
 
 {--------------------------------------------------------------------

@@ -10,6 +10,15 @@ import Text.StringTemplate.Classes
 import Text.StringTemplate.Instances()
 import Data.Generics.Basics
 import Data.Generics.Aliases
+import qualified Data.Map as M
+import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString.Lazy.Char8 as LB
+import Data.Maybe
+-- import qualified System.Time as OldTime
+-- import System.Locale
+-- import Data.Time
+import qualified Data.Text as T
+import qualified Data.Text.Lazy as LT
 
 gToSElem :: forall a b.(Data a, Stringable b) => a -> SElem b
 gToSElem = (\x ->
@@ -21,12 +30,25 @@ gToSElem = (\x ->
            `ext1Q` (\t -> case t of (Just x) -> gToSElem x; _ -> SNull)
            `ext1Q` (SM . fmap gToSElem)
            `ext1Q` (LI . map gToSElem)
+           -- `extQ` (toSElem :: OldTime.CalendarTime -> SElem b)
+           -- `extQ` (toSElem :: OldTime.TimeDiff -> SElem b)
+           -- `extQ` (toSElem :: TimeOfDay -> SElem b)
+           -- `extQ` (toSElem :: UTCTime -> SElem b)
+           -- `extQ` (toSElem :: TimeZone -> SElem b)
+           -- `extQ` (toSElem :: ZonedTime -> SElem b)
+           -- `extQ` (toSElem :: Day -> SElem b)
+           -- `extQ` (toSElem :: LocalTime -> SElem b)
+           `extQ` (toSElem :: LB.ByteString -> SElem b)
+           `extQ` (toSElem :: B.ByteString -> SElem b)
+           `extQ` (toSElem :: LT.Text -> SElem b)
+           `extQ` (toSElem :: T.Text -> SElem b)
            `extQ` (toSElem :: Bool -> SElem b)
            `extQ` (toSElem :: Float -> SElem b)
            `extQ` (toSElem :: Double -> SElem b)
            `extQ` (toSElem :: Int -> SElem b)
            `extQ` (toSElem :: Integer -> SElem b)
            `extQ` (toSElem :: String -> SElem b)
+
 
 instance Data a => ToSElem a
     where toSElem = gToSElem

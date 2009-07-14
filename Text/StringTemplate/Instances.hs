@@ -16,6 +16,11 @@ import qualified Data.Foldable as F
 import qualified System.Time as OldTime
 import System.Locale
 import Data.Time
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
+import qualified Data.Text.Lazy as LT
+import qualified Data.Text.Lazy.Encoding as LT
+
 
 {--------------------------------------------------------------------
   Additional instances for items that may be set as StringTemplate
@@ -32,6 +37,12 @@ instance ToSElem LB.ByteString where
 
 instance ToSElem B.ByteString where
     toSElem = BS . LB.fromChunks . (:[])
+
+instance ToSElem LT.Text where
+    toSElem = BS . LT.encodeUtf8
+
+instance ToSElem T.Text where
+    toSElem = BS . LB.fromChunks . (:[]) . T.encodeUtf8
 
 instance ToSElem Bool where
     toSElem True = STR ""

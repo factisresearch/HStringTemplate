@@ -113,7 +113,7 @@ optInsertGroup opts f = (inSGen (optInsertGroup opts) . optInsertTmpl opts) <$$>
 
 -- | Sets an encoding function of a group that all values are
 -- rendered with in each enclosed template
-setEncoderGroup :: (Stringable a) => (String -> String) ->  STGroup a -> STGroup a
+setEncoderGroup :: (Stringable a) => (a -> a) ->  STGroup a -> STGroup a
 setEncoderGroup x f = (inSGen (setEncoderGroup x) . setEncoder x) <$$> f
 
 -- | For any requested template, returns a message that the template was
