@@ -126,6 +126,7 @@ instance Stringable LT.Text where
     smempty = LT.empty
     smappend = LT.append
 
+--add dlist instance
 instance Stringable (Endo String) where
     stFromString = Endo . (++)
     stToString = ($ []) . appEndo

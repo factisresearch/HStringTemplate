@@ -370,12 +370,16 @@ exprn = do
   exprs <- comlist subexprn <?> "expression"
   templ <- many (char ':' >> iterApp <$> comlist (anonTmpl <|> regTemplate)) <?> "template call"
   return $ fromMany (showVal <*> head exprs)
-             ((sequence exprs >>=) . seqTmpls) templ
+             ((sequence exprs >>=) . seqTmpls') templ
 
-seqTmpls :: Stringable a => [[SElem a] -> SEnv a -> a] -> [SElem a] -> SEnv a -> a
-seqTmpls [f]    y = f y
-seqTmpls (f:fs) y = seqTmpls fs =<< (:[]) . SBLE . f y
-seqTmpls  _ _     = const (stFromString "")
+seqTmpls' :: Stringable a => [[SElem a] -> SEnv a -> [a]] -> [SElem a] -> SEnv a -> a
+seqTmpls' tmpls elems snv = mintercalate sep $ seqTmpls tmpls elems snv
+    where sep = showVal snv $ fromMaybe (justSTR "") =<< optLookup "separator" $ snv
+
+seqTmpls :: Stringable a => [[SElem a] -> SEnv a -> [a]] -> [SElem a] -> SEnv a -> [a]
+seqTmpls [f]    y snv = f y snv
+seqTmpls (f:fs) y snv = concatMap (\x -> seqTmpls fs x snv) (map ((:[]) . SBLE) $ f y snv)
+seqTmpls  _ _ _   = [stFromString ""]
 
 subexprn :: Stringable a => TmplParser (SEnv a -> SElem a)
 subexprn = cct <$> spaced
@@ -440,13 +444,15 @@ functn = do
 --------------------------------------------------------------------}
 --change makeTmpl to do notation for clarity?
 
+
+
 mkIndex :: Num b => [b] -> [[SElem a]]
 mkIndex = map ((:) . STR . show . (1+) <*> (:[]) . STR . show)
 ix0 :: [SElem a]
 ix0 = [STR "1",STR "0"]
 
-cycleApp :: (Stringable a) => [([SElem a], [SElem a]) -> SEnv a -> a] -> [([SElem a], [SElem a])]  -> SEnv a -> a
-cycleApp x y snv = mconcatMap' snv (zipWith ($) (cycle x) y) ($ snv)
+cycleApp :: (Stringable a) => [([SElem a], [SElem a]) -> SEnv a -> a] -> [([SElem a], [SElem a])]  -> SEnv a -> [a]
+cycleApp x y snv = map ($ snv) (zipWith ($) (cycle x) y)
 
 pluslen :: [a] -> [([a], [SElem b])]
 pluslen xs = zip (map (:[]) xs) $ mkIndex [0..(length xs)]
@@ -456,10 +462,17 @@ liTrans = pluslen' . paddedTrans SNull . map u
     where u (LI x) = x; u x = [x]
           pluslen' xs = zip xs $ mkIndex [0..(length xs)]
 
-iterApp :: Stringable a => [([SElem a], [SElem a]) -> SEnv a -> a] -> [SElem a] -> SEnv a -> a
+--map repeatedly, then finally concat
+iterApp :: Stringable a => [([SElem a], [SElem a]) -> SEnv a -> a] -> [SElem a] -> SEnv a -> [a]
+iterApp [f] (LI xs:[])    snv = map (flip f snv) (pluslen xs)
+iterApp [f] vars@(LI _:_) snv = map (flip f snv) (liTrans vars)
+--(map $ liTrans vars) . flip f $ snv
+iterApp [f] v             snv = [f (v,ix0) snv]
+{-
 iterApp [f] (LI xs:[])    snv = (mconcatMap' snv $ pluslen xs) . flip f $ snv
 iterApp [f] vars@(LI _:_) snv = (mconcatMap' snv $ liTrans vars) . flip f $ snv
 iterApp [f] v             snv = f (v,ix0) snv
+-}
 iterApp fs (LI xs:[])     snv = cycleApp fs (pluslen xs) snv
 iterApp fs vars@(LI _:_)  snv = cycleApp fs (liTrans vars) snv
 iterApp fs xs             snv = cycleApp fs (pluslen xs) snv
