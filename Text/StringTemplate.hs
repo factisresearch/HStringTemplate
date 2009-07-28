@@ -43,7 +43,7 @@ module Text.StringTemplate (
   -- * Creation
   newSTMP, newAngleSTMP, getStringTemplate, getStringTemplate',
   -- * Display
-  toString, toPPDoc, render, dumpAttribs,
+  toString, toPPDoc, render, dumpAttribs, checkTemplate,
   -- * Modification
   setAttribute, (|=), setManyAttrib,
   setNativeAttribute, setManyNativeAttrib,

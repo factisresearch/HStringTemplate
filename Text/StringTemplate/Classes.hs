@@ -33,6 +33,7 @@ data SElem a = STR String
              | SM (SMap a)
              | LI [SElem a]
              | SBLE a
+             | SNAT a
              | SNull
 
 -- | The ToSElem class should be instantiated for all types that can be

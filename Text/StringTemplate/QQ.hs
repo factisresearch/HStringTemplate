@@ -30,9 +30,9 @@ stmp = QuasiQuoter quoteTmplExp quoteTmplPat
 quoteTmplPat = error "Cannot apply stmp quasiquoter in patterns"
 quoteTmplExp s = return tmpl
   where
-    vars = case parseSTMPNames s of
-             Right xs -> xs
-             Left  err -> error $ show err
+    vars = case parseSTMPNames ('$','$') s of
+             Right (xs,_,_) -> xs
+             Left  err -> fail $ show err
     base  = TH.AppE (TH.VarE (TH.mkName "newSTMP")) (TH.LitE (TH.StringL s))
     tmpl  = foldr addAttrib base vars
     addAttrib var = TH.AppE

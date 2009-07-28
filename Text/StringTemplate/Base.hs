@@ -1,3 +1,4 @@
+{-# LANGUAGE RelaxedPolyRec #-}
 {-# OPTIONS_HADDOCK not-home #-}
 
 module Text.StringTemplate.Base
@@ -9,6 +10,7 @@ module Text.StringTemplate.Base
      setNativeAttribute, setManyNativeAttrib,
      withContext, optInsertTmpl, setEncoder,
      paddedTrans, SEnv(..), parseSTMP, dumpAttribs,
+     checkTemplate,
      parseSTMPNames
     ) where
 import Control.Monad
@@ -23,12 +25,13 @@ import qualified Text.PrettyPrint.HughesPJ as PP
 
 import Text.StringTemplate.Classes
 import Text.StringTemplate.Instances()
+import Debug.Trace
 
 {--------------------------------------------------------------------
   Generic Utilities
 --------------------------------------------------------------------}
 
-type TmplParser = GenParser Char ((Char, Char),[String])
+type TmplParser = GenParser Char ((Char, Char),[String],[String],[String])
 
 (<$$>) :: (Functor f1, Functor f) => (a -> b) -> f (f1 a) -> f (f1 b)
 (<$$>) = (<$>) . (<$>)
@@ -71,7 +74,7 @@ type STGroup a = String -> (StFirst (StringTemplate a))
 -- PrettyPrinter 'Doc's, and 'Endo' 'String's, which are actually of type
 -- 'ShowS'. When a StringTemplate is composed of a type, its internals are
 -- as well, so it is, so to speak \"turtles all the way down.\"
-data StringTemplate a = STMP {senv :: SEnv a,  runSTMP :: SEnv a -> a}
+data StringTemplate a = STMP {senv :: SEnv a,  runSTMP :: SEnv a -> a, chkSTMP :: SEnv a -> (Maybe String, Maybe [String], Maybe [String])}
 
 -- | Renders a StringTemplate to a String.
 toString :: StringTemplate String -> String
@@ -85,15 +88,24 @@ toPPDoc = render
 render :: Stringable a => StringTemplate a -> a
 render = runSTMP <*> senv
 
+nullEnv = SEnv M.empty [] mempty id
+
+-- | Returns a tuple of three Maybes. The first is set if there is a parse error in the template.
+-- The next is set to a list of attributes that have not been set, or Nothing if all attributes are set.
+-- The last is set to a list of invoked templates that cannot be looked up, or Nothing if all invoked templates can be found.
+-- Note that this check is shallow -- i.e. missing attributes and templates are only caught in the top level template, not any invoked subtemplate.
+checkTemplate :: Stringable a => StringTemplate a -> (Maybe String, Maybe [String], Maybe [String])
+checkTemplate t = chkSTMP t (senv t)
+
 -- | Parses a String to produce a StringTemplate, with \'$\'s as delimiters.
 -- It is constructed with a stub group that cannot look up other templates.
 newSTMP :: Stringable a => String -> StringTemplate a
-newSTMP = STMP (SEnv M.empty [] mempty id) . parseSTMP ('$','$')
+newSTMP s = STMP nullEnv (parseSTMP ('$','$') s) (chkStmp ('$','$') s)
 
 -- | Parses a String to produce a StringTemplate, delimited by angle brackets.
 -- It is constructed with a stub group that cannot look up other templates.
 newAngleSTMP :: Stringable a => String -> StringTemplate a
-newAngleSTMP = STMP (SEnv M.empty [] mempty id) . parseSTMP ('<','>')
+newAngleSTMP s = STMP nullEnv (parseSTMP ('<','>') s) (chkStmp ('<','>') s)
 
 -- | Yields a StringTemplate with the appropriate attribute set.
 -- If the attribute already exists, it is appended to a list.
@@ -111,7 +123,7 @@ setManyAttrib = flip . foldl' . flip $ uncurry setAttribute
 -- representation, so is more efficient when, e.g. setting
 -- attributes that are large bytestrings in a bytestring template.
 setNativeAttribute :: Stringable b => String -> b -> StringTemplate b -> StringTemplate b
-setNativeAttribute s x st = st {senv = envInsApp s (SBLE x) (senv st)}
+setNativeAttribute s x st = st {senv = envInsApp s (SNAT x) (senv st)}
 
 -- | Yields a StringTemplate with the appropriate attributes set.
 -- If any attribute already exists, it is appended to a list.
@@ -153,7 +165,7 @@ setEncoder x st = st {senv = (senv st) {senc = x} }
 -- This may be made available to any template as a function by adding it to its group.
 -- I.e. @ myNewGroup = addSuperGroup myGroup $ groupStringTemplates [("dumpAttribs", dumpAttribs)] @
 dumpAttribs :: Stringable a => StringTemplate a
-dumpAttribs = STMP (SEnv M.empty [] mempty id) $ \env -> showVal env (SM $ smp env)
+dumpAttribs = STMP nullEnv (\env -> showVal env (SM $ smp env)) (const (Nothing, Nothing, Nothing))
 
 {--------------------------------------------------------------------
   Internal API
@@ -191,19 +203,37 @@ mergeSEnvs :: SEnv a -> SEnv a -> SEnv a
 mergeSEnvs x y = SEnv {smp = M.union (smp x) (smp y), sopts = (sopts y ++ sopts x), sgen = sgen x, senc = senc y}
 
 parseSTMP :: (Stringable a) => (Char, Char) -> String -> SEnv a -> a
-parseSTMP x = either (showStr .  show) id . runParser (stmpl False) (x,[]) ""
+parseSTMP x = either (showStr .  show) id . runParser (stmpl False) (x,[],[],[]) ""
 
 getSeps :: TmplParser (Char, Char)
-getSeps = fst <$> getState
+getSeps = (\(x,_,_,_) -> x) <$> getState
 
-tellNames :: String -> TmplParser ()
-tellNames x = getState >>= \(s,n) -> setState (s,x:n)
+tellName :: String -> TmplParser ()
+tellName x = getState >>= \(s,q,n,t) -> setState (s,q,x:n,t)
 
-parseSTMPNames :: String -> Either ParseError [String]
-parseSTMPNames = runParser getRefs (('$','$'),[]) ""
+tellQQ :: String -> TmplParser ()
+tellQQ x = getState >>= \(s,q,n,t) -> setState (s,x:q,n,t)
+
+tellTmpl :: String -> TmplParser ()
+tellTmpl x = getState >>= \(s,q,n,t) -> setState (s,q,n,x:t)
+
+-- | Gets all quasiquoted names, normal names & templates used in a given template.
+-- Must be passed a pair of chars denoting the delimeters to be used.
+parseSTMPNames :: (Char, Char) -> String -> Either ParseError ([String],[String],[String])
+parseSTMPNames cs s = runParser getRefs (cs,[],[],[]) "" s
     where getRefs = do
-            stmpl False :: TmplParser (SEnv String -> String)
-            snd <$> getState
+            (stmpl False :: TmplParser (SEnv String -> String))
+            (_,qqnames,regnames,tmpls) <- getState
+            return (qqnames, regnames, tmpls)
+
+chkStmp :: Stringable a => (Char, Char) -> String -> SEnv a -> (Maybe String, Maybe [String], Maybe [String])
+chkStmp cs s snv = case parseSTMPNames cs s of
+                     Left err -> (Just $ "Parse error: " ++ show err, Nothing, Nothing)
+                     Right (_, regnames, tmpls) ->
+                         let nonms   = filter (\x -> not $ elem x (M.keys $ smp snv)) regnames
+                             notmpls = filter (\x -> isNothing $ stGetFirst (sgen snv x)) tmpls
+                         in (Nothing, if null nonms then Nothing else Just nonms,
+                                      if null notmpls then Nothing else Just notmpls)
 
 {--------------------------------------------------------------------
   Internal API for polymorphic display of elements
@@ -220,7 +250,8 @@ showVal snv se = case se of
                    LI xs  -> joinUpWith showVal xs
                    SM sm  -> joinUpWith showAssoc $ M.assocs sm
                    STSH x -> stEncode (format x)
-                   SBLE x -> senc snv x
+                   SNAT x -> senc snv x
+                   SBLE x -> x
                    SNull  -> showVal <*> nullOpt $ snv
     where format = maybe stshow . stfshow <*> optLookup "format" $ snv
           joinUpWith f xs = mconcatMap' snv xs (f snv)
@@ -367,10 +398,13 @@ endifstat = getSeps >>= char . fst >> string "endif" >> return (showStr "")
 
 exprn :: Stringable a => TmplParser (SEnv a -> a)
 exprn = do
-  exprs <- comlist subexprn <?> "expression"
-  templ <- many (char ':' >> iterApp <$> comlist (anonTmpl <|> regTemplate)) <?> "template call"
+  exprs <- comlist ( (SBLE <$$> around '(' exprn ')')
+                     <|> subexprn)
+             <?> "expression"
+  templ <- tmplChain
   return $ fromMany (showVal <*> head exprs)
              ((sequence exprs >>=) . seqTmpls') templ
+      where tmplChain = many (char ':' >> iterApp <$> comlist (anonTmpl <|> regTemplate)) <?> "template call"
 
 seqTmpls' :: Stringable a => [[SElem a] -> SEnv a -> [a]] -> [SElem a] -> SEnv a -> a
 seqTmpls' tmpls elems snv = mintercalate sep $ seqTmpls tmpls elems snv
@@ -406,7 +440,7 @@ attrib :: Stringable a => TmplParser (SEnv a -> SElem a)
 attrib = do
   a <-     literal
        <|> try functn
-       <|> prepExp <$> word
+       <|> prepExp <$> regWord
        <|> prepExp <$> qqWord
        <|> around '(' subexprn ')'
           <?> "attribute"
@@ -415,8 +449,12 @@ attrib = do
       where prepExp var = fromMaybe SNull <$> envLookup var
             qqWord = do
               w <- around '`' word '`'
-              tellNames w
+              tellQQ w
               return $ '`' : w ++ "`"
+            regWord = do
+              w <- word
+              tellName w
+              return w
 
 --add null func
 functn :: Stringable a => TmplParser (SEnv a -> SElem a)
@@ -466,13 +504,7 @@ liTrans = pluslen' . paddedTrans SNull . map u
 iterApp :: Stringable a => [([SElem a], [SElem a]) -> SEnv a -> a] -> [SElem a] -> SEnv a -> [a]
 iterApp [f] (LI xs:[])    snv = map (flip f snv) (pluslen xs)
 iterApp [f] vars@(LI _:_) snv = map (flip f snv) (liTrans vars)
---(map $ liTrans vars) . flip f $ snv
 iterApp [f] v             snv = [f (v,ix0) snv]
-{-
-iterApp [f] (LI xs:[])    snv = (mconcatMap' snv $ pluslen xs) . flip f $ snv
-iterApp [f] vars@(LI _:_) snv = (mconcatMap' snv $ liTrans vars) . flip f $ snv
-iterApp [f] v             snv = f (v,ix0) snv
--}
 iterApp fs (LI xs:[])     snv = cycleApp fs (pluslen xs) snv
 iterApp fs vars@(LI _:_)  snv = cycleApp fs (liTrans vars) snv
 iterApp fs xs             snv = cycleApp fs (pluslen xs) snv
@@ -485,6 +517,7 @@ regTemplate = do
   try (functn::TmplParser (SEnv String -> SElem String)) .>> fail "" <|> return ()
   name <- justSTR <$> many1 (alphaNum <|> char '/'<|> char '_')
           <|> around '(' subexprn ')'
+  tryTellTmpl (name nullEnv)
   vals <- around '(' (spaced $ try assgn <|> anonassgn <|> return []) ')'
   return $ join . (. name) . makeTmpl vals
       where makeTmpl v ((se:_),is) (STR x)  =
@@ -495,6 +528,8 @@ regTemplate = do
             anonassgn = (:[]) . (,) "it" <$> subexprn
             assgn = (spaced word >>= (<$> char '=' .>> spaced subexprn) . (,))
                     `sepEndBy1` char ';'
+            tryTellTmpl (STR x) = tellTmpl x
+            tryTellTmpl _ = return ()
 
 --DEBUG
 
