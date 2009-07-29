@@ -1,4 +1,4 @@
-{-# LANGUAGE RelaxedPolyRec #-}
+{-# LANGUAGE RelaxedPolyRec, DeriveDataTypeable #-}
 {-# OPTIONS_HADDOCK not-home #-}
 
 module Text.StringTemplate.Base
@@ -10,15 +10,20 @@ module Text.StringTemplate.Base
      setNativeAttribute, setManyNativeAttrib,
      withContext, optInsertTmpl, setEncoder,
      paddedTrans, SEnv(..), parseSTMP, dumpAttribs,
-     checkTemplate,
+     checkTemplate, checkTemplateDeep,
      parseSTMPNames
     ) where
-import Control.Monad
 import Control.Arrow
 import Control.Applicative hiding ((<|>),many)
+import Control.Monad
+import Control.Parallel.Strategies(rnf, NFData(..))
+import qualified Control.Exception as C
+import Data.List
 import Data.Maybe
 import Data.Monoid
-import Data.List
+import Data.Typeable
+import System.IO.Unsafe
+
 import Text.ParserCombinators.Parsec
 import qualified Data.Map as M
 import qualified Text.PrettyPrint.HughesPJ as PP
@@ -179,6 +184,14 @@ inSGen f st@STMP{senv = env} = st {senv = env {sgen = f (sgen env)} }
 
 envLookup :: String -> SEnv a -> Maybe (SElem a)
 envLookup x = M.lookup x . smp
+
+envLookupEx :: String -> SEnv a -> SElem a
+envLookupEx x snv = case M.lookup x (smp snv) of
+                      Just a -> a
+                      Nothing -> case optLookup "throwException" snv of
+                                   Just _ -> C.throw $ NoAttrib x
+                                   Nothing -> SNull
+
 envInsert :: (String, SElem a) -> SEnv a -> SEnv a
 envInsert (s, x) y = y {smp = M.insert s x (smp y)}
 envInsApp :: Stringable a => String -> SElem a -> SEnv a -> SEnv a
@@ -234,6 +247,21 @@ chkStmp cs s snv = case parseSTMPNames cs s of
                              notmpls = filter (\x -> isNothing $ stGetFirst (sgen snv x)) tmpls
                          in (Nothing, if null nonms then Nothing else Just nonms,
                                       if null notmpls then Nothing else Just notmpls)
+
+data TmplException = NoAttrib String | NoTmpl String deriving (Show, Typeable)
+instance C.Exception TmplException
+
+-- | Returns a tuple of two lists. The first is of missing attributes, the second is of missing templates. If there are no missing attributes or templates, then both lists will be empty. Note that while this check is deep, it does not catch parse errors, only missing attribute and template errors.
+checkTemplateDeep :: (Stringable a, NFData a) => StringTemplate a -> ([String], [String])
+checkTemplateDeep t = unsafePerformIO $ go t' ([],[])
+    where t' = inSGen (`mappend` nullGroup) $ optInsertTmpl [("throwException","true")] t
+          nullGroup x = StFirst $ Just (C.throw $ NoTmpl x)
+          go tmpl (e1,e2) = (C.evaluate (rnf $ render tmpl) >> return (e1,e2)) `C.catch`
+                                  \e -> case e of NoTmpl x -> go (addSub x tmpl) (e1,x:e2)
+                                                  NoAttrib x -> go (setAttribute x "" tmpl)  (x:e1, e2)
+          addSub x tmpl = inSGen (mappend $ blankGroup x) tmpl
+          blankGroup x s = StFirst $ if x == s then Just (newSTMP "") else Nothing
+
 
 {--------------------------------------------------------------------
   Internal API for polymorphic display of elements
@@ -440,14 +468,13 @@ attrib :: Stringable a => TmplParser (SEnv a -> SElem a)
 attrib = do
   a <-     literal
        <|> try functn
-       <|> prepExp <$> regWord
-       <|> prepExp <$> qqWord
+       <|> envLookupEx <$> regWord
+       <|> envLookupEx <$> qqWord
        <|> around '(' subexprn ')'
           <?> "attribute"
   proprs <- props
   return $ fromMany a ((a >>=) . getProp) proprs
-      where prepExp var = fromMaybe SNull <$> envLookup var
-            qqWord = do
+      where qqWord = do
               w <- around '`' word '`'
               tellQQ w
               return $ '`' : w ++ "`"
