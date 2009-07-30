@@ -79,7 +79,7 @@ type STGroup a = String -> (StFirst (StringTemplate a))
 -- PrettyPrinter 'Doc's, and 'Endo' 'String's, which are actually of type
 -- 'ShowS'. When a StringTemplate is composed of a type, its internals are
 -- as well, so it is, so to speak \"turtles all the way down.\"
-data StringTemplate a = STMP {senv :: SEnv a,  runSTMP :: SEnv a -> a, chkSTMP :: SEnv a -> (Maybe String, Maybe [String], Maybe [String])}
+data StringTemplate a = STMP {senv :: SEnv a,  runSTMP :: Either String (SEnv a -> a), chkSTMP :: SEnv a -> (Maybe String, Maybe [String], Maybe [String])}
 
 -- | Renders a StringTemplate to a String.
 toString :: StringTemplate String -> String
@@ -91,7 +91,7 @@ toPPDoc = render
 
 -- | Generic render function for a StringTemplate of any type.
 render :: Stringable a => StringTemplate a -> a
-render = runSTMP <*> senv
+render = either (showStr) id . runSTMP <*> senv
 
 nullEnv = SEnv M.empty [] mempty id
 
@@ -170,7 +170,7 @@ setEncoder x st = st {senv = (senv st) {senc = x} }
 -- This may be made available to any template as a function by adding it to its group.
 -- I.e. @ myNewGroup = addSuperGroup myGroup $ groupStringTemplates [("dumpAttribs", dumpAttribs)] @
 dumpAttribs :: Stringable a => StringTemplate a
-dumpAttribs = STMP nullEnv (\env -> showVal env (SM $ smp env)) (const (Nothing, Nothing, Nothing))
+dumpAttribs = STMP nullEnv (Right $ \env -> showVal env (SM $ smp env)) (const (Nothing, Nothing, Nothing))
 
 {--------------------------------------------------------------------
   Internal API
@@ -215,8 +215,8 @@ stLookup x env = maybe (newSTMP ("No Template Found for: " ++ x))
 mergeSEnvs :: SEnv a -> SEnv a -> SEnv a
 mergeSEnvs x y = SEnv {smp = M.union (smp x) (smp y), sopts = (sopts y ++ sopts x), sgen = sgen x, senc = senc y}
 
-parseSTMP :: (Stringable a) => (Char, Char) -> String -> SEnv a -> a
-parseSTMP x = either (showStr .  show) id . runParser (stmpl False) (x,[],[],[]) ""
+parseSTMP :: (Stringable a) => (Char, Char) -> String -> Either String (SEnv a -> a)
+parseSTMP x = either (Left . show) Right . runParser (stmpl False) (x,[],[],[]) ""
 
 getSeps :: TmplParser (Char, Char)
 getSeps = (\(x,_,_,_) -> x) <$> getState
@@ -248,20 +248,29 @@ chkStmp cs s snv = case parseSTMPNames cs s of
                          in (Nothing, if null nonms then Nothing else Just nonms,
                                       if null notmpls then Nothing else Just notmpls)
 
-data TmplException = NoAttrib String | NoTmpl String deriving (Show, Typeable)
+data TmplException = NoAttrib String | NoTmpl String | ParseError String String deriving (Show, Typeable)
 instance C.Exception TmplException
 
--- | Returns a tuple of two lists. The first is of missing attributes, the second is of missing templates. If there are no missing attributes or templates, then both lists will be empty. Note that while this check is deep, it does not catch parse errors, only missing attribute and template errors.
-checkTemplateDeep :: (Stringable a, NFData a) => StringTemplate a -> ([String], [String])
-checkTemplateDeep t = unsafePerformIO $ go t' ([],[])
-    where t' = inSGen (`mappend` nullGroup) $ optInsertTmpl [("throwException","true")] t
-          nullGroup x = StFirst $ Just (C.throw $ NoTmpl x)
-          go tmpl (e1,e2) = (C.evaluate (rnf $ render tmpl) >> return (e1,e2)) `C.catch`
-                                  \e -> case e of NoTmpl x -> go (addSub x tmpl) (e1,x:e2)
-                                                  NoAttrib x -> go (setAttribute x "" tmpl)  (x:e1, e2)
+-- | Generic render function for a StringTemplate of any type.
+renderErr :: Stringable a => String -> StringTemplate a -> a
+renderErr n t = case runSTMP t of
+                Right rt -> rt (senv t)
+                Left err -> case optLookup "throwException" (senv t) of
+                              Just _ -> C.throw $ ParseError n err
+                              Nothing -> showStr err (senv t)
+
+-- | Returns a tuple of three lists. The first is of templates with parse errors, and their erros. The next is of missing attributes, and the last is of missing templates. If there are no errors, then all lists will be empty.
+checkTemplateDeep :: (Stringable a, NFData a) => StringTemplate a -> ([(String,String)], [String], [String])
+checkTemplateDeep t = case runSTMP t of
+                        Left err -> ([("Top Level Template", err)], [],[])
+                        Right _ -> unsafePerformIO $ go ([],[],[]) $ inSGen (`mappend` nullGroup) $ optInsertTmpl [("throwException","true")] t
+    where go (e1,e2,e3) tmpl = (C.evaluate (rnf $ render tmpl) >> return (e1,e2,e3)) `C.catch`
+                                  \e -> case e of NoTmpl x -> go (e1,e2,x:e3) $ addSub x tmpl
+                                                  NoAttrib x -> go (e1,x:e2, e3) $ setAttribute x "" tmpl
+                                                  ParseError n x -> go ((n,x):e1,e2,e3) $ addSub n tmpl
           addSub x tmpl = inSGen (mappend $ blankGroup x) tmpl
           blankGroup x s = StFirst $ if x == s then Just (newSTMP "") else Nothing
-
+          nullGroup x = StFirst $ Just (C.throw $ NoTmpl x)
 
 {--------------------------------------------------------------------
   Internal API for polymorphic display of elements
@@ -316,8 +325,7 @@ props = many $ char '.' >> (around '(' subexprn ')' <|> justSTR <$> word)
 
 escapedChar, escapedStr :: String -> GenParser Char st String
 escapedChar chs =
-    noneOf chs >>= \x -> if x == '\\' then anyChar >>= \y ->
-    if y `elem` chs then return [y] else return [x, y] else return [x]
+    noneOf chs >>= \x -> if x == '\\' then anyChar >>= \y -> return [y] else return [x]
 escapedStr chs = concat <$> many1 (escapedChar chs)
 
 {--------------------------------------------------------------------
@@ -548,8 +556,8 @@ regTemplate = do
   vals <- around '(' (spaced $ try assgn <|> anonassgn <|> return []) ')'
   return $ join . (. name) . makeTmpl vals
       where makeTmpl v ((se:_),is) (STR x)  =
-                render |. stBind . (zip ["it","i","i0"] (se:is) ++)
-                           . swing (map . second) v <*> stLookup x
+                renderErr x |. stBind . (zip ["it","i","i0"] (se:is) ++)
+                             . swing (map . second) v <*> stLookup x
             makeTmpl _ _ _ = showStr "Invalid Template Specified"
             stBind v st = st {senv = foldr envInsert (senv st) v}
             anonassgn = (:[]) . (,) "it" <$> subexprn
