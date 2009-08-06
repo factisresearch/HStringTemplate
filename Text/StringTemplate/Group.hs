@@ -18,6 +18,7 @@ import System.Directory
 import Data.IORef
 import System.IO.Unsafe
 import System.IO.Error
+import System.IO.UTF8 as U
 import qualified Data.Map as M
 
 import Text.StringTemplate.Base
@@ -32,7 +33,7 @@ import Text.StringTemplate.Classes
 
 readFile' :: FilePath -> IO String
 readFile' f = do
-  x <- readFile f
+  x <- U.readFile f
   length x `seq` return x
 
 groupFromFiles :: Stringable a => (FilePath -> IO String) -> [(FilePath,String)] -> IO (STGroup a)
@@ -79,7 +80,7 @@ directoryGroup path =
 -- these exceptions in unexpected places.
 directoryGroupLazy :: (Stringable a) => FilePath -> IO (STGroup a)
 directoryGroupLazy path =
-    groupFromFiles readFile .
+    groupFromFiles U.readFile .
     map ((</>) path &&& takeBaseName) . filter ((".st" ==) . takeExtension) =<<
     getDirectoryContents path
 
@@ -90,7 +91,7 @@ directoryGroupRecursive path = groupFromFiles readFile' =<< getTmplsRecursive ""
 
 -- | See documentation for 'directoryGroupRecursive'.
 directoryGroupRecursiveLazy :: (Stringable a) => FilePath -> IO (STGroup a)
-directoryGroupRecursiveLazy path = groupFromFiles readFile =<< getTmplsRecursive "" path
+directoryGroupRecursiveLazy path = groupFromFiles U.readFile =<< getTmplsRecursive "" path
 
 -- | Adds a supergroup to any StringTemplate group such that templates from
 -- the original group are now able to call ones from the supergroup as well.
@@ -134,7 +135,7 @@ unsafeVolatileDirectoryGroup :: Stringable a => FilePath -> Int -> IO (STGroup a
 unsafeVolatileDirectoryGroup path m = return . flip addSubGroup extraTmpls $ cacheSTGroup stfg
     where stfg = StFirst . Just . newSTMP . unsafePerformIO . flip catch
                        (return . (\e -> "IO Error: " ++ show (ioeGetFileName e) ++ " -- " ++ ioeGetErrorString e))
-                 . readFile . (path </>) . (++".st")
+                 . U.readFile . (path </>) . (++".st")
           extraTmpls = addSubGroup (groupStringTemplates [("dumpAttribs", dumpAttribs)]) nullGroup
           cacheSTGroup :: STGroup a -> STGroup a
           cacheSTGroup g = unsafePerformIO $ do
