@@ -14,7 +14,7 @@ module Text.StringTemplate.Base
      parseSTMPNames
     ) where
 import Control.Arrow
-import Control.Applicative hiding ((<|>),many)
+import Control.Applicative hiding ((<|>),many,optional)
 import Control.Monad
 import Control.Parallel.Strategies(rnf, NFData(..))
 import qualified Control.Exception as C
@@ -328,18 +328,25 @@ escapedChar chs =
     noneOf chs >>= \x -> if x == '\\' then anyChar >>= \y -> return [y] else return [x]
 escapedStr chs = concat <$> many1 (escapedChar chs)
 
+escapedStr' chs = dropTrailingBr . concat <$> many1 (escapedChar chs)
+    where dropTrailingBr ('\r':'\n':[]) = []
+          dropTrailingBr ('\n':[]) = []
+          dropTrailingBr [] = []
+          dropTrailingBr (x:xs) = x : dropTrailingBr xs
+
 {--------------------------------------------------------------------
   The Grammar
 --------------------------------------------------------------------}
 myConcat :: Stringable a => [SEnv a -> a] -> (SEnv a -> a)
 myConcat xs a = smconcat $ map ($ a) xs
 
+
 -- | if p is true, stmpl can fail gracefully, false it dies hard.
 -- Set to false at the top level, and true within if expressions.
 stmpl :: Stringable a => Bool -> TmplParser (SEnv a -> a)
 stmpl p = do
   (ca, cb) <- getSeps
-  myConcat <$> many (showStr <$> escapedStr [ca] <|> try (around ca optExpr cb)
+  myConcat <$> many (showStr <$> escapedStr' [ca] <|> try (around ca optExpr cb)
                     <|> try comment <|> bl <?> "template")
       where bl | p = try blank | otherwise = blank
 
@@ -347,7 +354,7 @@ subStmp :: Stringable a => TmplParser (([SElem a], [SElem a]) -> SEnv a -> a)
 subStmp = do
   (ca, cb) <- getSeps
   udEnv <- option (transform ["it"]) (transform <$> try attribNames)
-  st <- myConcat <$> many (showStr <$> escapedStr (ca:"}|")
+  st <- myConcat <$> many (showStr <$> escapedStr' (ca:"}|")
                          <|> try (around ca optExpr cb)
                          <|> try comment <|> blank  <?> "subtemplate")
   return (st <$$> udEnv)
@@ -389,6 +396,9 @@ optExpr = do
   Statements
 --------------------------------------------------------------------}
 
+optLine :: TmplParser ()
+optLine = optional (char '\r') >> optional (char '\n')
+
 --if env then do stuff
 getProp :: Stringable a => [SEnv a -> SElem a] -> SElem a -> SEnv a -> SElem a
 getProp (p:ps) (SM mp) env =
@@ -409,7 +419,7 @@ ifstat = do
   n <- option True (char '!' >> return False)
   e <- subexprn
   p <- props
-  char ')' >> char cb
+  char ')' >> char cb >> optLine
   act <- stmpl True
   cont <- (try elseifstat <|> try elsestat <|> endifstat)
   return (ifIsSet act cont n =<< getProp p =<< e)
@@ -421,6 +431,7 @@ elsestat ::Stringable a => TmplParser (SEnv a -> a)
 elsestat = do
   (ca, cb) <- getSeps
   around ca (string "else") cb
+  optLine
   act <- stmpl True
   char ca >> string "endif"
   return act
