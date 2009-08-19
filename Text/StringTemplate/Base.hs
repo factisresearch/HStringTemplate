@@ -216,7 +216,13 @@ mergeSEnvs :: SEnv a -> SEnv a -> SEnv a
 mergeSEnvs x y = SEnv {smp = M.union (smp x) (smp y), sopts = (sopts y ++ sopts x), sgen = sgen x, senc = senc y}
 
 parseSTMP :: (Stringable a) => (Char, Char) -> String -> Either String (SEnv a -> a)
-parseSTMP x = either (Left . show) Right . runParser (stmpl False) (x,[],[],[]) ""
+parseSTMP x = either (Left . show) Right . runParser (stmpl False) (x,[],[],[]) "" . dropTrailingBr
+
+dropTrailingBr :: String -> String
+dropTrailingBr ('\r':'\n':[]) = []
+dropTrailingBr ('\n':[]) = []
+dropTrailingBr [] = []
+dropTrailingBr (x:xs) = x : dropTrailingBr xs
 
 getSeps :: TmplParser (Char, Char)
 getSeps = (\(x,_,_,_) -> x) <$> getState
@@ -328,11 +334,9 @@ escapedChar chs =
     noneOf chs >>= \x -> if x == '\\' then anyChar >>= \y -> return [y] else return [x]
 escapedStr chs = concat <$> many1 (escapedChar chs)
 
-escapedStr' chs = dropTrailingBr . concat <$> many1 (escapedChar chs)
-    where dropTrailingBr ('\r':'\n':[]) = []
-          dropTrailingBr ('\n':[]) = []
-          dropTrailingBr [] = []
-          dropTrailingBr (x:xs) = x : dropTrailingBr xs
+{-
+escapedStr' chs = dropTrailingBr <$> escapedStr chs
+-}
 
 {--------------------------------------------------------------------
   The Grammar
@@ -346,7 +350,7 @@ myConcat xs a = smconcat $ map ($ a) xs
 stmpl :: Stringable a => Bool -> TmplParser (SEnv a -> a)
 stmpl p = do
   (ca, cb) <- getSeps
-  myConcat <$> many (showStr <$> escapedStr' [ca] <|> try (around ca optExpr cb)
+  myConcat <$> many (showStr <$> escapedStr [ca] <|> try (around ca optExpr cb)
                     <|> try comment <|> bl <?> "template")
       where bl | p = try blank | otherwise = blank
 
@@ -354,7 +358,7 @@ subStmp :: Stringable a => TmplParser (([SElem a], [SElem a]) -> SEnv a -> a)
 subStmp = do
   (ca, cb) <- getSeps
   udEnv <- option (transform ["it"]) (transform <$> try attribNames)
-  st <- myConcat <$> many (showStr <$> escapedStr' (ca:"}|")
+  st <- myConcat <$> many (showStr <$> escapedStr (ca:"}|")
                          <|> try (around ca optExpr cb)
                          <|> try comment <|> blank  <?> "subtemplate")
   return (st <$$> udEnv)
