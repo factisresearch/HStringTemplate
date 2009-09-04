@@ -9,7 +9,8 @@
 --
 -- A StringTemplate is a String with \"holes\" in it.
 -- This is a port of the Java StringTemplate library written by Terrence Parr.
--- (<http://www.stringtemplate.org>).
+-- (<http://www.stringtemplate.org>). User-contributed documentation available at
+-- <http://www.haskell.org/haskellwiki/HStringTemplate>.
 --
 -- This library implements the basic 3.1 grammar, lacking group files
 -- (though not groups themselves), Regions, and Interfaces.
@@ -19,11 +20,6 @@
 -- HughesPJ Pretty Printing library. Calling toPPDoc on a StringTemplate
 -- yields a Doc with appropriate paragraph-fill wrapping that can be
 -- rendered in the usual fashion.
---
--- This library extends the current StringTemplate grammar by allowing the
--- application of alternating attributes to anonymous
--- as well as regular templates, including therefore sets of alternating
--- attributes.
 --
 -- Basic instances are provided of the StringTemplateShows and ToSElem class.
 -- Any type deriving ToSElem can be passed automatically as a StringTemplate
