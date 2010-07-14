@@ -38,6 +38,7 @@ gToSElem = (\x ->
            -- `extQ` (toSElem :: ZonedTime -> SElem b)
            -- `extQ` (toSElem :: Day -> SElem b)
            -- `extQ` (toSElem :: LocalTime -> SElem b)
+           `extQ` (toSElem :: Char -> SElem b)
            `extQ` (toSElem :: LB.ByteString -> SElem b)
            `extQ` (toSElem :: B.ByteString -> SElem b)
            `extQ` (toSElem :: LT.Text -> SElem b)
