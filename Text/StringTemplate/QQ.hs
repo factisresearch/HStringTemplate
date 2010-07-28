@@ -19,7 +19,6 @@ module Text.StringTemplate.QQ (stmp) where
 import qualified Language.Haskell.TH as TH
 import Language.Haskell.TH.Quote
 import Text.StringTemplate.Base
-import Control.Monad.Writer
 
 quoteTmplExp :: String -> TH.ExpQ
 quoteTmplPat :: String -> TH.PatQ

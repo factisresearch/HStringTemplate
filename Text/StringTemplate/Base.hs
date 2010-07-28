@@ -16,7 +16,7 @@ module Text.StringTemplate.Base
 import Control.Arrow
 import Control.Applicative hiding ((<|>),many,optional)
 import Control.Monad
-import Control.Parallel.Strategies(rnf, NFData(..))
+import Control.DeepSeq
 import qualified Control.Exception as C
 import Data.List
 import Data.Maybe
@@ -30,7 +30,6 @@ import qualified Text.PrettyPrint.HughesPJ as PP
 
 import Text.StringTemplate.Classes
 import Text.StringTemplate.Instances()
-import Debug.Trace
 
 {--------------------------------------------------------------------
   Generic Utilities
@@ -93,6 +92,7 @@ toPPDoc = render
 render :: Stringable a => StringTemplate a -> a
 render = either (showStr) id . runSTMP <*> senv
 
+nullEnv :: SEnv a
 nullEnv = SEnv M.empty [] mempty id
 
 -- | Returns a tuple of three Maybes. The first is set if there is a parse error in the template.
@@ -182,8 +182,10 @@ data SEnv a = SEnv {smp :: SMap a, sopts :: [(String, (SEnv a -> SElem a))], sge
 inSGen :: (STGroup a -> STGroup a) -> StringTemplate a -> StringTemplate a
 inSGen f st@STMP{senv = env} = st {senv = env {sgen = f (sgen env)} }
 
+{-
 envLookup :: String -> SEnv a -> Maybe (SElem a)
 envLookup x = M.lookup x . smp
+-}
 
 envLookupEx :: String -> SEnv a -> SElem a
 envLookupEx x snv = case M.lookup x (smp snv) of
@@ -241,7 +243,7 @@ tellTmpl x = getState >>= \(s,q,n,t) -> setState (s,q,n,x:t)
 parseSTMPNames :: (Char, Char) -> String -> Either ParseError ([String],[String],[String])
 parseSTMPNames cs s = runParser getRefs (cs,[],[],[]) "" s
     where getRefs = do
-            (stmpl False :: TmplParser (SEnv String -> String))
+            _ <- stmpl False :: TmplParser (SEnv String -> String)
             (_,qqnames,regnames,tmpls) <- getState
             return (qqnames, regnames, tmpls)
 
@@ -318,7 +320,7 @@ stfshow snv fs (STShow a) = stringTemplateFormattedShow
                             (stToString <$$> showVal <*> fs $ snv) a
 
 around :: Char -> GenParser Char st t -> Char -> GenParser Char st t
-around x p y = do {char x; v<-p; char y; return v}
+around x p y = do {_ <- char x; v<-p; _ <- char y; return v}
 spaced :: GenParser Char st t -> GenParser Char st t
 spaced p = do {spaces; v<-p; spaces; return v}
 word :: GenParser Char st String
@@ -369,15 +371,15 @@ subStmp = do
 comment :: Stringable a => TmplParser (SEnv a -> a)
 comment = do
   (ca, cb) <- getSeps
-  string [ca,'!'] >> manyTill anyChar (try . string $ ['!',cb])
+  _ <- string [ca,'!'] >> manyTill anyChar (try . string $ ['!',cb])
   return (showStr "")
 
 blank :: Stringable a => TmplParser (SEnv a -> a)
 blank = do
   (ca, cb) <- getSeps
-  char ca
+  _ <- char ca
   spaces
-  char cb
+  _ <- char cb
   return (showStr "")
 
 optExpr :: Stringable a => TmplParser (SEnv a -> a)
@@ -392,7 +394,7 @@ optExpr = do
             optList = sepBy oneOpt (char ',' <|> char ';')
             oneOpt = do
               o <- spaced word
-              char '='
+              _ <- char '='
               v <- spaced subexprn
               return (o,v)
 
@@ -419,7 +421,7 @@ ifIsSet t e n _ = if n then t else e
 ifstat ::Stringable a => TmplParser (SEnv a -> a)
 ifstat = do
   (_, cb) <- getSeps
-  string "if("
+  _ <- string "if("
   n <- option True (char '!' >> return False)
   e <- subexprn
   p <- props
@@ -434,10 +436,10 @@ elseifstat = getSeps >>= char . fst >> string "else" >> ifstat
 elsestat ::Stringable a => TmplParser (SEnv a -> a)
 elsestat = do
   (ca, cb) <- getSeps
-  around ca (string "else") cb
+  _ <- around ca (string "else") cb
   optLine
   act <- stmpl True
-  char ca >> string "endif"
+  _ <- char ca >> string "endif"
   return act
 
 endifstat ::Stringable a => TmplParser (SEnv a -> a)

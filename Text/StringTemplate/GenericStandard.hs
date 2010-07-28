@@ -10,10 +10,8 @@ import Text.StringTemplate.Classes
 import Text.StringTemplate.Instances()
 import Data.Generics.Basics
 import Data.Generics.Aliases
-import qualified Data.Map as M
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as LB
-import Data.Maybe
 -- import qualified System.Time as OldTime
 -- import System.Locale
 -- import Data.Time
