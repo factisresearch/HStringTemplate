@@ -24,7 +24,7 @@ quoteTmplExp :: String -> TH.ExpQ
 quoteTmplPat :: String -> TH.PatQ
 
 stmp :: QuasiQuoter
-stmp = QuasiQuoter quoteTmplExp quoteTmplPat
+stmp = QuasiQuoter {quoteExp = quoteTmplExp, quotePat = quoteTmplPat}
 
 quoteTmplPat = error "Cannot apply stmp quasiquoter in patterns"
 quoteTmplExp s = return tmpl
