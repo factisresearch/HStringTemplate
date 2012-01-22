@@ -323,8 +323,13 @@ around :: Char -> GenParser Char st t -> Char -> GenParser Char st t
 around x p y = do {_ <- char x; v<-p; _ <- char y; return v}
 spaced :: GenParser Char st t -> GenParser Char st t
 spaced p = do {spaces; v<-p; spaces; return v}
+
+identifierChar :: GenParser Char st Char
+identifierChar = alphaNum <|> char '_'
+
 word :: GenParser Char st String
-word = many1 alphaNum
+word = many1 identifierChar
+
 comlist :: GenParser Char st a -> GenParser Char st [a]
 comlist p = spaced (p `sepBy1` spaced (char ','))
 
@@ -536,7 +541,7 @@ functn = do
 
 
 
-mkIndex :: Num b => [b] -> [[SElem a]]
+mkIndex :: (Num b, Show b) => [b] -> [[SElem a]]
 mkIndex = map ((:) . STR . show . (1+) <*> (:[]) . STR . show)
 ix0 :: [SElem a]
 ix0 = [STR "1",STR "0"]
@@ -567,7 +572,7 @@ anonTmpl = around '{' subStmp '}'
 regTemplate :: Stringable a => TmplParser (([SElem a], [SElem a]) -> SEnv a -> a)
 regTemplate = do
   try (functn::TmplParser (SEnv String -> SElem String)) .>> fail "" <|> return ()
-  name <- justSTR <$> many1 (alphaNum <|> char '/'<|> char '_')
+  name <- justSTR <$> many1 (identifierChar <|> char '/')
           <|> around '(' subexprn ')'
   tryTellTmpl (name nullEnv)
   vals <- around '(' (spaced $ try assgn <|> anonassgn <|> return []) ')'

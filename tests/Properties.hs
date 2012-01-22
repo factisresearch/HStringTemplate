@@ -28,7 +28,7 @@ main = do
     mapM print results
     when (not $ all (isSuccess  . snd) results) $ fail "Not all tests passed!"
  where
-    isSuccess (Success _) = True
+    isSuccess (Success _ _ _) = True
     isSuccess _ = False
     tests =
         [("prop_paddedTrans" , mytest prop_paddedTrans),

@@ -83,7 +83,7 @@ instance ToSElem Int where
 instance ToSElem Integer where
     toSElem = STR . show
 
-instance Integral a => ToSElem (Ratio a) where
+instance (Integral a, Show a) => ToSElem (Ratio a) where
     toSElem = STR . show
 
 --Dates and Times

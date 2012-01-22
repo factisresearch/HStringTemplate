@@ -1,5 +1,5 @@
 name:                HStringTemplate
-version:             0.6.6
+version:             0.6.8
 synopsis:            StringTemplate implementation in Haskell.
 description:         A port of the Java library by Terrence Parr.
 category:            Text
@@ -41,4 +41,4 @@ library
 
 source-repository head
   type:     darcs
-  location: http://code.haskell.org/HStringTemplate/
+  location: http://patch-tag.com/r/sclv/hstringtemplate
