@@ -3,8 +3,10 @@
 
 module Text.StringTemplate.Group
     (groupStringTemplates, addSuperGroup, addSubGroup, setEncoderGroup,
-     mergeSTGroups, directoryGroup, optInsertGroup,
-     directoryGroupLazy, directoryGroupRecursive, directoryGroupRecursiveLazy,
+     mergeSTGroups, directoryGroup, directoryGroupExt, optInsertGroup,
+     directoryGroupLazy, directoryGroupLazyExt, directoryGroupRecursive,
+     directoryGroupRecursiveExt, directoryGroupRecursiveLazy,
+     directoryGroupRecursiveLazyExt,
      unsafeVolatileDirectoryGroup, nullGroup
     ) where
 import Control.Applicative
@@ -41,13 +43,13 @@ groupFromFiles rf fs = groupStringTemplates <$> forM fs  (\(f,fname) -> do
      stmp <- newSTMP <$> rf f
      return (fname, stmp))
 
-getTmplsRecursive :: FilePath -> FilePath -> IO [(FilePath, FilePath)]
-getTmplsRecursive base fp = do
+getTmplsRecursive :: FilePath -> FilePath -> FilePath -> IO [(FilePath, FilePath)]
+getTmplsRecursive ext base fp = do
           dirContents <- filter (not . isPrefixOf ".") <$> getDirectoryContents fp
           subDirs <- filterM (doesDirectoryExist . (fp </>)) dirContents
-          subs <- concat <$> mapM (\x -> getTmplsRecursive (base </> x) (fp </> x)) subDirs
-          return $ (map ((fp </>) &&& (\x -> base </> dropExtension x)) $
-                    filter ((".st" ==) . takeExtension) dirContents)
+          subs <- concat <$> mapM (\x -> getTmplsRecursive ext (base </> x) (fp </> x)) subDirs
+          return $ (map ((fp </>) &&& (\x -> base </> dropExtensions x)) $
+                    filter ((ext ==) . takeExtension) dirContents)
                    ++ subs
 
 {--------------------------------------------------------------------
@@ -66,9 +68,13 @@ groupStringTemplates xs = newGen
 -- This function is strict, with all files read once. As it performs file IO,
 -- expect it to throw the usual exceptions.
 directoryGroup :: (Stringable a) => FilePath -> IO (STGroup a)
-directoryGroup path =
+directoryGroup = directoryGroupExt ".st"
+
+-- | Given a path, returns a group which generates all files in said directory which have the supplied extension.
+directoryGroupExt :: (Stringable a) => FilePath -> FilePath -> IO (STGroup a)
+directoryGroupExt ext path =
     groupFromFiles readFile' .
-    map ((</>) path &&& takeBaseName) . filter ((".st" ==) . takeExtension) =<<
+    map ((</>) path &&& takeBaseName) . filter ((ext ==) . takeExtension) =<<
     getDirectoryContents path
 
 -- | Given a path, returns a group which generates all files in said directory
@@ -79,19 +85,31 @@ directoryGroup path =
 -- expect it to throw the usual exceptions. And, as it is lazy, expect
 -- these exceptions in unexpected places.
 directoryGroupLazy :: (Stringable a) => FilePath -> IO (STGroup a)
-directoryGroupLazy path =
+directoryGroupLazy = directoryGroupLazyExt ".st"
+
+-- | Given a path, returns a group which generates all files in said directory which have the supplied extension.
+directoryGroupLazyExt :: (Stringable a) => FilePath -> FilePath -> IO (STGroup a)
+directoryGroupLazyExt ext path =
     groupFromFiles U.readFile .
-    map ((</>) path &&& takeBaseName) . filter ((".st" ==) . takeExtension) =<<
+    map ((</>) path &&& takeBaseName) . filter ((ext ==) . takeExtension) =<<
     getDirectoryContents path
 
 -- | As with 'directoryGroup', but traverses subdirectories as well. A template named
 -- \"foo/bar.st\" may be referenced by \"foo/bar\" in the returned group.
 directoryGroupRecursive :: (Stringable a) => FilePath -> IO (STGroup a)
-directoryGroupRecursive path = groupFromFiles readFile' =<< getTmplsRecursive "" path
+directoryGroupRecursive = directoryGroupRecursiveExt ".st"
+
+-- | As with 'directoryGroupRecursive', but a template extension is supplied.
+directoryGroupRecursiveExt :: (Stringable a) => FilePath -> FilePath -> IO (STGroup a)
+directoryGroupRecursiveExt ext path = groupFromFiles readFile' =<< getTmplsRecursive ext "" path
 
 -- | See documentation for 'directoryGroupRecursive'.
 directoryGroupRecursiveLazy :: (Stringable a) => FilePath -> IO (STGroup a)
-directoryGroupRecursiveLazy path = groupFromFiles U.readFile =<< getTmplsRecursive "" path
+directoryGroupRecursiveLazy = directoryGroupRecursiveLazyExt ".st"
+
+-- | As with 'directoryGroupRecursiveLazy', but a template extension is supplied.
+directoryGroupRecursiveLazyExt :: (Stringable a) => FilePath -> FilePath -> IO (STGroup a)
+directoryGroupRecursiveLazyExt ext path = groupFromFiles U.readFile =<< getTmplsRecursive ext "" path
 
 -- | Adds a supergroup to any StringTemplate group such that templates from
 -- the original group are now able to call ones from the supergroup as well.

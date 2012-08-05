@@ -48,9 +48,11 @@ module Text.StringTemplate (
   setEncoder, setEncoderGroup,
   -- * Groups
   groupStringTemplates, addSuperGroup, addSubGroup,
-  mergeSTGroups, directoryGroup, unsafeVolatileDirectoryGroup,
+  mergeSTGroups, directoryGroup, directoryGroupExt,
+  unsafeVolatileDirectoryGroup,
   directoryGroupRecursive, directoryGroupRecursiveLazy,
-  directoryGroupLazy, nullGroup
+  directoryGroupRecursiveExt, directoryGroupRecursiveLazyExt,
+  directoryGroupLazy, directoryGroupLazyExt, nullGroup
   ) where
 import Text.StringTemplate.Base
 import Text.StringTemplate.Group
