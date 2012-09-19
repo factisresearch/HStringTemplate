@@ -11,6 +11,7 @@ module Text.StringTemplate.Group
     ) where
 import Control.Applicative
 import Control.Arrow
+import qualified Control.Exception as CE
 import Control.Monad
 import Data.Monoid
 import Data.List
@@ -152,7 +153,7 @@ nullGroup x = StFirst . Just . newSTMP $ "Could not find template: " ++ x
 -- by default, as it should prove useful for debugging and developing templates.
 unsafeVolatileDirectoryGroup :: Stringable a => FilePath -> Int -> IO (STGroup a)
 unsafeVolatileDirectoryGroup path m = return . flip addSubGroup extraTmpls $ cacheSTGroup stfg
-    where stfg = StFirst . Just . newSTMP . unsafePerformIO . flip E.catch
+    where stfg = StFirst . Just . newSTMP . unsafePerformIO . flip catch
                        (return . (\e -> "IO Error: " ++ show (ioeGetFileName e) ++ " -- " ++ ioeGetErrorString e))
                  . U.readFile . (path </>) . (++".st")
           extraTmpls = addSubGroup (groupStringTemplates [("dumpAttribs", dumpAttribs)]) nullGroup
