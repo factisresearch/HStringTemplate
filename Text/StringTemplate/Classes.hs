@@ -7,6 +7,8 @@ module Text.StringTemplate.Classes
 import qualified Data.Map as M
 import Data.List
 import Data.Monoid
+import qualified Blaze.ByteString.Builder as BB
+import qualified Blaze.ByteString.Builder.Char.Utf8 as BB
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as LB
 import qualified Data.Text as T
@@ -112,6 +114,13 @@ instance Stringable LT.Text where
     stFromByteString = LT.decodeUtf8
     stFromText = id
     stToString = LT.unpack
+
+instance Stringable BB.Builder where
+    stFromString = BB.fromString
+    stFromByteString = BB.fromLazyByteString
+    stToString = LB.unpack . BB.toLazyByteString
+    smappend = mappend
+    smempty = mempty
 
 --add dlist instance
 instance Stringable (Endo String) where
