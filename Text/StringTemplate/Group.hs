@@ -50,7 +50,7 @@ getTmplsRecursive ext base fp = do
           dirContents <- filter (not . isPrefixOf ".") <$> getDirectoryContents fp
           subDirs <- filterM (doesDirectoryExist . (fp </>)) dirContents
           subs <- concat <$> mapM (\x -> getTmplsRecursive ext (base </> x) (fp </> x)) subDirs
-          return $ (map ((fp </>) &&& (\x -> base </> dropExtensions x)) $
+          return $ (map ((fp </>) &&& (\x -> base </> dropExtension x)) $
                     filter ((ext ==) . takeExtension) dirContents)
                    ++ subs
 
