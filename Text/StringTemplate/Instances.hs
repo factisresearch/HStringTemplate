@@ -16,6 +16,7 @@ import qualified Data.Foldable as F
 import qualified System.Time as OldTime
 import System.Locale
 import Data.Time
+import Data.Void
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as LT
@@ -28,6 +29,12 @@ import qualified Data.Text.Lazy.Encoding as LT
 --------------------------------------------------------------------}
 
 --Basics
+instance ToSElem () where
+    toSElem _ = STR ""
+
+instance ToSElem Void where
+    toSElem = absurd
+
 instance ToSElem Char where
     toSElem = STR . (:[])
     toSElemList = STR

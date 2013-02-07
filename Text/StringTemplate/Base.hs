@@ -349,7 +349,7 @@ escapedStr' chs = dropTrailingBr <$> escapedStr chs
   The Grammar
 --------------------------------------------------------------------}
 myConcat :: Stringable a => [SEnv a -> a] -> (SEnv a -> a)
-myConcat xs a = smconcat $ map ($ a) xs
+myConcat xs a = mconcatMap xs ($ a)
 
 
 -- | if p is true, stmpl can fail gracefully, false it dies hard.
