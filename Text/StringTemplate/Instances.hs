@@ -46,10 +46,10 @@ instance ToSElem B.ByteString where
     toSElem = BS . LB.fromChunks . (:[])
 
 instance ToSElem LT.Text where
-    toSElem = BS . LT.encodeUtf8
+    toSElem = TXT
 
 instance ToSElem T.Text where
-    toSElem = BS . LB.fromChunks . (:[]) . T.encodeUtf8
+    toSElem = TXT . LT.fromStrict
 
 instance ToSElem Bool where
     toSElem True = STR ""

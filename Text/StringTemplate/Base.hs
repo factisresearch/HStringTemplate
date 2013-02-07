@@ -292,6 +292,7 @@ showVal :: Stringable a => SEnv a -> SElem a -> a
 showVal snv se = case se of
                    STR x  -> stEncode x
                    BS  x  -> stEncodeBS x
+                   TXT x  -> stEncodeText x
                    LI xs  -> joinUpWith showVal xs
                    SM sm  -> joinUpWith showAssoc $ M.assocs sm
                    STSH x -> stEncode (format x)
@@ -301,8 +302,9 @@ showVal snv se = case se of
     where format = maybe stshow . stfshow <*> optLookup "format" $ snv
           joinUpWith f xs = mconcatMap' snv xs (f snv)
           showAssoc e (k,v) = stEncode (k ++ ": ") `mlabel` showVal e v
-          stEncode   = senc snv . stFromString
-          stEncodeBS = senc snv . stFromByteString
+          stEncode     = senc snv . stFromString
+          stEncodeBS   = senc snv . stFromByteString
+          stEncodeText = senc snv . stFromText
 
 showStr :: Stringable a => String -> SEnv a -> a
 showStr = const . stFromString

@@ -27,8 +27,9 @@ instance Functor StFirst where
 
 type SMap a = M.Map String (SElem a)
 
-data SElem a = STR String
-             | BS LB.ByteString
+data SElem a = STR  String
+             | BS   LB.ByteString
+             | TXT  LT.Text
              | STSH STShow
              | SM (SMap a)
              | LI [SElem a]
