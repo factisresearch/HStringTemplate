@@ -11,9 +11,11 @@ import qualified Blaze.ByteString.Builder as BB
 import qualified Blaze.ByteString.Builder.Char.Utf8 as BB
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as LB
+--import qualified Data.ByteString.Lazy.Builder as DBB
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as LT
+import qualified Data.Text.Lazy.Builder as TB
 import qualified Data.Text.Lazy.Encoding as LT
 import qualified Text.PrettyPrint.HughesPJ as PP
 
@@ -68,7 +70,7 @@ data STShow = forall a.(StringTemplateShows a) => STShow a
 class Monoid a => Stringable a where
     stFromString :: String -> a
     stFromByteString :: LB.ByteString -> a
-    stFromByteString = stFromString . LT.unpack . LT.decodeUtf8
+    stFromByteString = stFromText . LT.decodeUtf8
     stFromText :: LT.Text -> a
     stFromText = stFromString . LT.unpack
     stToString :: a -> String
@@ -119,8 +121,19 @@ instance Stringable BB.Builder where
     stFromString = BB.fromString
     stFromByteString = BB.fromLazyByteString
     stToString = LB.unpack . BB.toLazyByteString
-    smappend = mappend
-    smempty = mempty
+
+{-
+instance Stringable LBB.Builder where
+    stFromString = stringUtf8
+    stFromByteString = LBB.lazyByteString
+    stToString = LB.unpack . LBB.toLazyByteString
+-}
+
+instance Stringable TB.Builder where
+    stFromString = TB.fromString
+    stFromText = TB.fromLazyText
+    stToString = LT.unpack . TB.toLazyText
+
 
 --add dlist instance
 instance Stringable (Endo String) where
