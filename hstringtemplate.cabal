@@ -1,5 +1,5 @@
 name:                HStringTemplate
-version:             0.7.0
+version:             0.7.1
 synopsis:            StringTemplate implementation in Haskell.
 description:         A port of the Java library by Terrence Parr.
 category:            Text
@@ -25,7 +25,8 @@ library
     build-depends: template-haskell >= 2.3, mtl
     exposed-modules: Text.StringTemplate.QQ
 
-  build-depends:   syb, base >= 4, base < 5, filepath, parsec < 4, containers, pretty, time, old-time, old-locale, bytestring, directory, array, text, deepseq, utf8-string, blaze-builder, void
+  build-depends:   syb, base >= 4, base < 5, filepath, parsec < 4, containers, pretty >= 1.1.0.0,
+                   time, old-time, old-locale, bytestring, directory, array, text, deepseq, utf8-string, blaze-builder, void
 
   exposed-modules:   Text.StringTemplate
                      Text.StringTemplate.Base
