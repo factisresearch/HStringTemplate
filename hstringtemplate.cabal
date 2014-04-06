@@ -12,26 +12,17 @@ Build-Type:          Simple
 build-Depends:       base
 Cabal-Version:       >= 1.6
 
-flag syb-with-class
-   default: False
-flag quasi-quotation
 
 library
-  if flag(syb-with-class)
-    build-depends:   syb-with-class
-    exposed-modules: Text.StringTemplate.GenericWithClass
-
-  if flag(quasi-quotation)
-    build-depends: template-haskell >= 2.3, mtl
-    exposed-modules: Text.StringTemplate.QQ
 
   build-depends:   syb, base >= 4, base < 5, filepath, parsec < 4, containers, pretty >= 1.1.0.0,
-                   time, old-time, old-locale, bytestring, directory, array, text, deepseq, utf8-string, blaze-builder, void
+                   time, old-time, old-locale, bytestring, directory, array, text, deepseq, utf8-string, blaze-builder, void, template-haskell >= 2.3, mtl
 
   exposed-modules:   Text.StringTemplate
                      Text.StringTemplate.Base
                      Text.StringTemplate.Classes
                      Text.StringTemplate.GenericStandard
+                     Text.StringTemplate.QQ
   other-modules:     Text.StringTemplate.Instances
                      Text.StringTemplate.Group
                      Text.StringTemplate.Renderf
