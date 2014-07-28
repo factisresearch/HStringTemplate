@@ -32,10 +32,10 @@ quoteTmplExp s = return tmpl
     vars = case parseSTMPNames ('$','$') s of
              Right (xs,_,_) -> xs
              Left  err -> fail $ show err
-    base  = TH.AppE (TH.VarE (TH.mkName "newSTMP")) (TH.LitE (TH.StringL s))
+    base  = TH.AppE (TH.VarE (TH.mkName "Text.StringTemplate.newSTMP")) (TH.LitE (TH.StringL s))
     tmpl  = foldr addAttrib base vars
     addAttrib var = TH.AppE
-        (TH.AppE (TH.AppE (TH.VarE (TH.mkName "setAttribute"))
+        (TH.AppE (TH.AppE (TH.VarE (TH.mkName "Text.StringTemplate.setAttribute"))
                           (TH.LitE (TH.StringL ('`' : var ++ "`"))))
                  (TH.VarE (TH.mkName  var)))
 
