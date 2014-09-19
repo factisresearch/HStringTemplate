@@ -13,8 +13,6 @@ import Data.Ratio
 import Data.Array
 import Data.Maybe
 import qualified Data.Foldable as F
-import qualified System.Time as OldTime
-import System.Locale as SL
 import Data.Time
 import Data.Void
 import qualified Data.Text as T
@@ -94,33 +92,22 @@ instance (Integral a, Show a) => ToSElem (Ratio a) where
     toSElem = STR . show
 
 --Dates and Times
-instance StringTemplateShows OldTime.CalendarTime where
-    stringTemplateShow = OldTime.calendarTimeToString
-    stringTemplateFormattedShow = OldTime.formatCalendarTime SL.defaultTimeLocale
-instance ToSElem OldTime.CalendarTime where
-    toSElem = stShowsToSE
-
-instance StringTemplateShows OldTime.TimeDiff where
-    stringTemplateShow = OldTime.timeDiffToString
-    stringTemplateFormattedShow = OldTime.formatTimeDiff SL.defaultTimeLocale
-instance ToSElem OldTime.TimeDiff where
-    toSElem = stShowsToSE
 
 instance StringTemplateShows Day where
     stringTemplateShow = show
-    stringTemplateFormattedShow = formatTime SL.defaultTimeLocale
+    stringTemplateFormattedShow = formatTime defaultTimeLocale
 instance ToSElem Day where
     toSElem = stShowsToSE
 
 instance StringTemplateShows LocalTime where
     stringTemplateShow = show
-    stringTemplateFormattedShow = formatTime SL.defaultTimeLocale
+    stringTemplateFormattedShow = formatTime defaultTimeLocale
 instance ToSElem LocalTime where
     toSElem = stShowsToSE
 
 instance StringTemplateShows TimeOfDay where
     stringTemplateShow = show
-    stringTemplateFormattedShow = formatTime SL.defaultTimeLocale
+    stringTemplateFormattedShow = formatTime defaultTimeLocale
 instance ToSElem TimeOfDay where
     toSElem = stShowsToSE
 
@@ -132,13 +119,13 @@ instance ToSElem UTCTime where
 
 instance StringTemplateShows TimeZone where
     stringTemplateShow = show
-    stringTemplateFormattedShow = formatTime SL.defaultTimeLocale
+    stringTemplateFormattedShow = formatTime defaultTimeLocale
 instance ToSElem TimeZone where
     toSElem = stShowsToSE
 
 instance StringTemplateShows ZonedTime where
     stringTemplateShow = show
-    stringTemplateFormattedShow = formatTime SL.defaultTimeLocale
+    stringTemplateFormattedShow = formatTime defaultTimeLocale
 instance ToSElem ZonedTime where
     toSElem = stShowsToSE
 

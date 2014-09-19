@@ -16,7 +16,7 @@ Cabal-Version:       >= 1.6
 library
 
   build-depends:   syb, base >= 4, base < 5, filepath, parsec < 4, containers, pretty >= 1.1.0.0,
-                   time < 1.6, old-time < 1.2, old-locale < 1.1, bytestring, directory, array, text, deepseq, utf8-string, blaze-builder, void, template-haskell >= 2.3, mtl
+                   time >= 1.5 && < 1.6, bytestring, directory, array, text, deepseq, utf8-string, blaze-builder, void, template-haskell >= 2.3, mtl
 
   exposed-modules:   Text.StringTemplate
                      Text.StringTemplate.Base

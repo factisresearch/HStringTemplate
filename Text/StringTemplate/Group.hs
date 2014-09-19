@@ -15,7 +15,6 @@ import qualified Control.Exception as CE
 import Control.Monad
 import Data.Monoid
 import Data.List
-import System.Time
 import System.FilePath
 import System.Directory
 import Data.IORef
