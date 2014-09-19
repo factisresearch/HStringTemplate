@@ -417,7 +417,10 @@ getProp :: Stringable a => [SEnv a -> SElem a] -> SElem a -> SEnv a -> SElem a
 getProp (p:ps) (SM mp) env =
   case M.lookup (stToString . showVal env $ p env) mp of
     Just prop -> getProp ps prop env
-    Nothing -> SNull
+    Nothing -> case optLookup "throwException" env of
+                 Just _ -> C.throw . NoAttrib $ "yeek" --intercalate "." . map showIt $ (p:ps)
+                 Nothing -> SNull
+  --where showIt x = stToString . showVal env $ x env
 getProp (_:_) _ _ = SNull
 getProp _ se _ = se
 
