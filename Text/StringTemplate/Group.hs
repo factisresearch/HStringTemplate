@@ -22,6 +22,7 @@ import System.IO.Unsafe
 import System.IO.Error
 import System.IO.UTF8 as U
 import qualified Data.Map as M
+import Data.Time
 
 import Text.StringTemplate.Base
 import Text.StringTemplate.Classes
@@ -160,7 +161,7 @@ unsafeVolatileDirectoryGroup path m = return . flip addSubGroup extraTmpls $ cac
                              !ior <- newIORef M.empty
                              return $ \s -> unsafePerformIO $ do
                                mp  <- readIORef ior
-                               curtime <- getClockTime
+                               curtime <- getCurrentTime
                                let udReturn now = do
                                        let st = g s
                                        atomicModifyIORef ior $
@@ -169,7 +170,7 @@ unsafeVolatileDirectoryGroup path m = return . flip addSubGroup extraTmpls $ cac
                                case M.lookup s mp of
                                  Nothing -> udReturn curtime
                                  Just (t, st) ->
-                                     if (tdSec . normalizeTimeDiff $
-                                               diffClockTimes curtime t) > m
+                                     if (round . realToFrac $
+                                               diffUTCTime curtime t) > m
                                        then udReturn curtime
                                        else return st
