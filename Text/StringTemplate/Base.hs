@@ -267,7 +267,7 @@ renderErr n t = case runSTMP t of
                               Just _ -> C.throw $ ParseError n err
                               Nothing -> showStr err (senv t)
 
--- | Returns a tuple of three lists. The first is of templates with parse errors, and their erros. The next is of missing attributes, and the last is of missing templates. If there are no errors, then all lists will be empty.
+-- | Returns a tuple of three lists. The first is of templates with parse errors, and their errors. The next is of missing attributes, and the last is of missing templates. If there are no errors, then all lists will be empty. This check is performed recursively.
 checkTemplateDeep :: (Stringable a, NFData a) => StringTemplate a -> ([(String,String)], [String], [String])
 checkTemplateDeep t = case runSTMP t of
                         Left err -> ([("Top Level Template", err)], [],[])

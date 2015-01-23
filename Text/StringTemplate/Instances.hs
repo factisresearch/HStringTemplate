@@ -16,9 +16,7 @@ import qualified Data.Foldable as F
 import Data.Time
 import Data.Void
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as LT
-import qualified Data.Text.Lazy.Encoding as LT
 
 
 {--------------------------------------------------------------------

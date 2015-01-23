@@ -18,9 +18,9 @@ import Data.List
 import System.FilePath
 import System.Directory
 import Data.IORef
+import System.IO
 import System.IO.Unsafe
 import System.IO.Error
-import System.IO.UTF8 as U
 import qualified Data.Map as M
 import Data.Time
 
@@ -34,10 +34,16 @@ import Text.StringTemplate.Classes
 (<$$>) :: (Functor f1, Functor f) => (a -> b) -> f (f1 a) -> f (f1 b)
 (<$$>) = (<$>) . (<$>)
 
+readFileUTF :: FilePath -> IO String
+readFileUTF f = do
+   h <- openFile f ReadMode
+   hSetEncoding h utf8
+   hGetContents h
+
 readFile' :: FilePath -> IO String
 readFile' f = do
-  x <- U.readFile f
-  length x `seq` return x
+   x <- readFileUTF f
+   length x `seq` return x
 
 groupFromFiles :: Stringable a => (FilePath -> IO String) -> [(FilePath,String)] -> IO (STGroup a)
 groupFromFiles rf fs = groupStringTemplates <$> forM fs  (\(f,fname) -> do
@@ -91,12 +97,12 @@ directoryGroupLazy = directoryGroupLazyExt ".st"
 -- | Given a path, returns a group which generates all files in said directory which have the supplied extension.
 directoryGroupLazyExt :: (Stringable a) => FilePath -> FilePath -> IO (STGroup a)
 directoryGroupLazyExt ext path =
-    groupFromFiles U.readFile .
+    groupFromFiles readFileUTF .
     map ((</>) path &&& takeBaseName) . filter ((ext ==) . takeExtension) =<<
     getDirectoryContents path
 
 -- | As with 'directoryGroup', but traverses subdirectories as well. A template named
--- \"foo/bar.st\" may be referenced by \"foo/bar\" in the returned group.
+-- \"foo\/bar.st\" may be referenced by \"foo\/bar\" in the returned group.
 directoryGroupRecursive :: (Stringable a) => FilePath -> IO (STGroup a)
 directoryGroupRecursive = directoryGroupRecursiveExt ".st"
 
@@ -110,7 +116,7 @@ directoryGroupRecursiveLazy = directoryGroupRecursiveLazyExt ".st"
 
 -- | As with 'directoryGroupRecursiveLazy', but a template extension is supplied.
 directoryGroupRecursiveLazyExt :: (Stringable a) => FilePath -> FilePath -> IO (STGroup a)
-directoryGroupRecursiveLazyExt ext path = groupFromFiles U.readFile =<< getTmplsRecursive ext "" path
+directoryGroupRecursiveLazyExt ext path = groupFromFiles readFileUTF =<< getTmplsRecursive ext "" path
 
 -- | Adds a supergroup to any StringTemplate group such that templates from
 -- the original group are now able to call ones from the supergroup as well.
@@ -154,8 +160,10 @@ unsafeVolatileDirectoryGroup :: Stringable a => FilePath -> Int -> IO (STGroup a
 unsafeVolatileDirectoryGroup path m = return . flip addSubGroup extraTmpls $ cacheSTGroup stfg
     where stfg = StFirst . Just . newSTMP . unsafePerformIO . flip CE.catch
                        (return . (\e -> "IO Error: " ++ show (ioeGetFileName e) ++ " -- " ++ ioeGetErrorString e))
-                 . U.readFile . (path </>) . (++".st")
+                 . readFileUTF . (path </>) . (++".st")
           extraTmpls = addSubGroup (groupStringTemplates [("dumpAttribs", dumpAttribs)]) nullGroup
+          delayTime :: Double
+          delayTime = fromIntegral m
           cacheSTGroup :: STGroup a -> STGroup a
           cacheSTGroup g = unsafePerformIO $ do
                              !ior <- newIORef M.empty
@@ -170,7 +178,7 @@ unsafeVolatileDirectoryGroup path m = return . flip addSubGroup extraTmpls $ cac
                                case M.lookup s mp of
                                  Nothing -> udReturn curtime
                                  Just (t, st) ->
-                                     if (round . realToFrac $
-                                               diffUTCTime curtime t) > m
+                                     if (realToFrac $
+                                               diffUTCTime curtime t) > delayTime
                                        then udReturn curtime
                                        else return st
