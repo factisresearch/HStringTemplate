@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, OverlappingInstances #-}
+{-# LANGUAGE CPP, FlexibleInstances, OverlappingInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_HADDOCK not-home #-}
 
@@ -17,6 +17,10 @@ import Data.Time
 import Data.Void
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
+
+#if !MIN_VERSION_time(1,5,0)
+import System.Locale (defaultTimeLocale)
+#endif
 
 
 {--------------------------------------------------------------------
