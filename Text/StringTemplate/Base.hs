@@ -274,7 +274,10 @@ checkTemplateDeep t = case runSTMP t of
                         Right _ -> unsafePerformIO $ go ([],[],[]) $ inSGen (`mappend` nullGroup) $ optInsertTmpl [("throwException","true")] t
     where go (e1,e2,e3) tmpl = (C.evaluate (rnf $ render tmpl) >> return (e1,e2,e3)) `C.catch`
                                   \e -> case e of NoTmpl x -> go (e1,e2,x:e3) $ addSub x tmpl
-                                                  NoAttrib x -> go (e1,x:e2, e3) $ setAttribute x "" tmpl
+                                                  -- This shortcircuits the deep evaluation in order to avoid an endless loop,
+                                                  -- but at least reports one error
+                                                  -- Ask the maintainer for a proper fix (which should be in getProp)
+                                                  NoAttrib x -> return (e1,x:e2,e3)
                                                   ParseError n x -> go ((n,x):e1,e2,e3) $ addSub n tmpl
           addSub x tmpl = inSGen (mappend $ blankGroup x) tmpl
           blankGroup x s = StFirst $ if x == s then Just (newSTMP "") else Nothing
@@ -418,9 +421,8 @@ getProp (p:ps) (SM mp) env =
   case M.lookup (stToString . showVal env $ p env) mp of
     Just prop -> getProp ps prop env
     Nothing -> case optLookup "throwException" env of
-                 Just _ -> C.throw . NoAttrib $ "yeek" --intercalate "." . map showIt $ (p:ps)
+                 Just _ -> C.throw . NoAttrib $ stToString . showVal env $ p env
                  Nothing -> SNull
-  --where showIt x = stToString . showVal env $ x env
 getProp (_:_) _ _ = SNull
 getProp _ se _ = se
 
