@@ -1,5 +1,5 @@
 name:                HStringTemplate
-version:             0.8.4
+version:             0.8.5
 synopsis:            StringTemplate implementation in Haskell.
 description:         A port of the Java library by Terrence Parr.
 category:            Text

@@ -19,6 +19,7 @@ module Text.StringTemplate.QQ (stmp) where
 import qualified Language.Haskell.TH as TH
 import Language.Haskell.TH.Quote
 import Text.StringTemplate.Base
+import qualified Data.Set as S
 
 quoteTmplExp :: String -> TH.ExpQ
 quoteTmplPat :: String -> TH.PatQ
@@ -33,9 +34,8 @@ quoteTmplExp s = return tmpl
              Right (xs,_,_) -> xs
              Left  err -> fail $ show err
     base  = TH.AppE (TH.VarE (TH.mkName "Text.StringTemplate.newSTMP")) (TH.LitE (TH.StringL s))
-    tmpl  = foldr addAttrib base vars
+    tmpl  = S.foldr addAttrib base $ S.fromList vars
     addAttrib var = TH.AppE
         (TH.AppE (TH.AppE (TH.VarE (TH.mkName "Text.StringTemplate.setAttribute"))
                           (TH.LitE (TH.StringL ('`' : var ++ "`"))))
                  (TH.VarE (TH.mkName  var)))
-
